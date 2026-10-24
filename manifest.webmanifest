@@ -1,0 +1,14 @@
+{
+  "name": "羊羹手帖",
+  "short_name": "羊羹手帖",
+  "description": "羊羹の味わいと個人的な評価を記録する手帖アプリ",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4efe6",
+  "theme_color": "#6f574a",
+  "lang": "ja",
+  "icons": [
+    { "src": "./icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

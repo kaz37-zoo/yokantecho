@@ -13,12 +13,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Kiwi+Maru:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=5.7">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <h1>ようかん手帖</h1>
+      <h1>ようかん手帖 <small class="app-version" aria-label="バージョン">v5.7</small></h1>
       <button id="addBtn" class="primary-btn" type="button">＋ 記録</button>
     </header>
     <main id="main" class="main-view" aria-live="polite"></main>
@@ -46,6 +46,8 @@
           <label class="check-row"><input id="includePreference" type="checkbox" checked><span>「好みの分析」に含める</span></label>
           <p class="helper">オフにしても記録・全商品平均・総合ランキング・種類別ランキングには残ります。</p>
         </div>
+        <label class="field"><span>製造元（任意・販売店と別に記録）</span><input id="manufacturerName" placeholder="例：横山甘泉堂" maxlength="120"></label>
+        <label class="field"><span>原材料（任意・「、」で区切る）</span><input id="ingredients" placeholder="例：砂糖、小豆、寒天"></label>
         <label class="field"><span>商品ページURL</span><input id="productUrl" type="url" placeholder="https://..." inputmode="url"></label>
         <label class="field"><span>購入場所・入手先</span><input id="purchasePlace" placeholder="本店、百貨店など"></label>
         <div class="two-col">
@@ -76,6 +78,6 @@
   </dialog>
 
   <dialog id="detailDialog" class="sheet detail-sheet"><div id="detailContent" class="sheet-inner"></div></dialog>
-  <script src="./app.js" defer></script>
+  <script src="./app.js?v=5.7" defer></script>
 </body>
 </html>

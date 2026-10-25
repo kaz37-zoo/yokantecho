@@ -644,18 +644,90 @@
     return input.slice(0,open+1)+body+input.slice(end-1);
   }
 
-  // v5.7: Human-readable tagged research has no JSON punctuation to break.
-  // Keep JSON import for all previous versions and historical ChatGPT responses.
+  // v5.8: Source lines may be joined by an AI response or copying software.
+  // Split only at URL boundaries; do not mistake a pipe in a label for a URL.
+  function parseResearchSources(value){
+    const input=String(value||'').trim();
+    const urls=[...input.matchAll(/https?:\/\/[^\s|<>"“”]+/gi)];
+    const sources=[];
+    for(let i=0;i<urls.length;i++){
+      const match=urls[i];
+      const rawUrl=match[0].replace(/[、。,)）]+$/,'');
+      const url=http(rawUrl);
+      if(!url || sources.some(s=>s.url===url))continue;
+      const rest=input.slice(match.index+match[0].length,urls[i+1]?.index ?? input.length)
+        .replace(/^[\s|｜・*\-]+/,'').trim();
+      const parts=rest.split(/\s*[|｜]\s*/).map(s=>s.trim()).filter(Boolean);
+      const candidate=parts.at(-1)||'';
+      const matchDate=candidate.match(/\d{4}-\d{2}-\d{2}|日付不明/);
+      const publishedAt=matchDate?.[0]||'日付不明';
+      const label=parts.filter((v,j)=>j!==parts.length-1 || !matchDate).join(' | ')||'参照ページ';
+      sources.push({url,label:cleanText(label,200),publishedAt});
+    }
+    return sources;
+  }
+  function taggedPayload(data){
+    for(const k of Object.keys(data))data[k]=String(data[k]||'').trim();
+    if((data.officialInfo||'').includes('調査した商品と容量を記載'))throw Error('調査依頼のひな型が貼られています。ChatGPTが調査して返した回答を貼り付けてください。');
+    if(!data.officialInfo && !data.reviewTrends){
+      throw Error('調査本文が見つかりません。officialInfo と reviewTrends の内容を含めて貼り付けてください。');
+    }
+    return {
+      schemaVersion:3,
+      productName:data.productName||'',shopName:data.shopName||'',
+      productInfo:{productName:data.officialProductName||'',manufacturerName:data.manufacturerName||'',
+        url:data.url||'',method:data.method||'',ingredients:data.ingredients||'',
+        materials:data.materials||'',textures:data.textures||'',styles:data.styles||''},
+      generalEvaluation:{officialInfo:data.officialInfo||'',reviewTrends:data.reviewTrends||'',
+        confidence:data.confidence||'low',assessedAt:data.assessedAt||'',sources:parseResearchSources(data.sources)}
+    };
+  }
+  // Accept both v5.7's strict one-label-per-line format and flattened replies
+  // whose labels were rewritten as plain English words on the same line.
+  // Long Japanese paragraphs stay untouched: only exact English field names
+  // at the defined boundaries are treated as separators.
+  function parseFlattenedTaggedResearch(src){
+    const all=['productName','shopName','officialProductName','manufacturerName','url',
+      'method','ingredients','materials','textures','styles',
+      'officialInfo','reviewTrends','confidence','assessedAt','sources'];
+    const required=['productName','shopName','officialInfo','reviewTrends','confidence','assessedAt','sources'];
+    const header=src.match(/^YOKAN_TECHO_FORMAT_V1\b/);
+    if(!header)return null;
+    const tail=src.slice(header[0].length);
+    const end=/\bYOKAN_TECHO_END\b/.exec(tail);
+    if(!end)throw Error('調査結果の末尾「YOKAN_TECHO_END」がありません。回答が途中で切れていないか確認してください。');
+    const body=tail.slice(0,end.index);
+    // Match bare tokens only at whitespace boundaries, never inside URLs.
+    const marker=/(^|\s)(?:\[([A-Za-z]+)\]|([A-Za-z]+))(?=\s|[:：=]|$)/g;
+    const found=[];let m;
+    while((m=marker.exec(body))!==null){
+      const key=m[2]||m[3];
+      if(!all.includes(key))continue;
+      const order=all.indexOf(key);
+      if(found.length && order<=found[found.length-1].order)continue;
+      const leading=m[1].length;
+      // m[0] may consume whitespace after the tag; next segment begins at m.index+m[0].length.
+      found.push({key,order,start:m.index+leading,end:marker.lastIndex});
+    }
+    if(!required.every(k=>found.some(f=>f.key===k)))return null;
+    const data={};
+    for(let i=0;i<found.length;i++){
+      const here=found[i],next=found[i+1];
+      data[here.key]=body.slice(here.end,next?.start ?? body.length).trim().replace(/^[:：=]\s*/,'');
+    }
+    return taggedPayload(data);
+  }
   function parseTaggedResearch(raw){
     const src=String(raw||'').replace(/\r\n?/g,'\n').trim()
       .replace(/^```[^\n]*\n/,'').replace(/\n```$/,'').trim();
     if(!src.startsWith('YOKAN_TECHO_FORMAT_V1'))return null;
-    if(!/^YOKAN_TECHO_END\s*$/m.test(src))throw Error('調査結果の末尾「YOKAN_TECHO_END」がありません。回答が途中で切れていないか確認してください。');
+    // The end marker may follow a source date with a space (no newline).
+    if(!/\bYOKAN_TECHO_END\b/.test(src))throw Error('調査結果の末尾「YOKAN_TECHO_END」がありません。回答が途中で切れていないか確認してください。');
     const known=new Set(['productName','shopName','officialProductName','manufacturerName','url',
       'method','ingredients','materials','textures','styles','officialInfo','reviewTrends',
       'confidence','assessedAt','sources']);
     const data={};let key=null;
-    for(const line of src.split('\n')){
+    for(const line of src.replace(/\bYOKAN_TECHO_END\b/,'\nYOKAN_TECHO_END').split('\n')){
       const candidate=line.trim().match(/^\[([A-Za-z]+)\]$/);
       if(candidate && known.has(candidate[1])){key=candidate[1];data[key]='';continue;}
       if(line.trim()==='YOKAN_TECHO_FORMAT_V1'||line.trim()==='YOKAN_TECHO_END'){
@@ -663,34 +735,12 @@
       }
       if(key!==null)data[key]+=(data[key]?'\n':'')+line;
     }
-    for(const k of Object.keys(data))data[k]=data[k].trim();
-    if((data.officialInfo||'').includes('調査した商品と容量を記載'))throw Error('調査依頼のひな型が貼られています。ChatGPTが調査して返した回答を貼り付けてください。');
-    if(!data.officialInfo && !data.reviewTrends){
-      throw Error('調査本文がありません。「[officialInfo]」「[reviewTrends]」以下の文章も含めて貼り付けてください。');
-    }
-    const sources=[];
-    for(const line of (data.sources||'').split('\n')){
-      const trimmed=line.trim().replace(/^[-・*]\s*/, '');
-      if(!trimmed)continue;
-      const u=trimmed.match(/https?:\/\/[^\s|<>"”“]+/i);
-      if(!u)continue;
-      const url=http(u[0].replace(/[、。,)）]+$/,''));
-      if(!url)continue;
-      const segments=trimmed.split(/\s*[|｜]\s*/).map(x=>x.trim());
-      const other=segments.filter(x=>x!==u[0] && !x.startsWith(u[0]));
-      const date=other.find(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)||x==='日付不明')||'日付不明';
-      const label=other.find(x=>x!==date)||'参照ページ';
-      if(!sources.some(s=>s.url===url))sources.push({url,label,publishedAt:date});
-    }
-    return {
-      schemaVersion:3,
-      productName:data.productName||'', shopName:data.shopName||'',
-      productInfo:{productName:data.officialProductName||'',manufacturerName:data.manufacturerName||'',
-        url:data.url||'',method:data.method||'',ingredients:data.ingredients||'',
-        materials:data.materials||'',textures:data.textures||'',styles:data.styles||''},
-      generalEvaluation:{officialInfo:data.officialInfo||'',reviewTrends:data.reviewTrends||'',
-        confidence:data.confidence||'low',assessedAt:data.assessedAt||'',sources}
-    };
+    // Normal multi-line tagged response gets priority; flattened is fallback.
+    if(data.officialInfo && data.reviewTrends)return taggedPayload(data);
+    const flattened=parseFlattenedTaggedResearch(src);
+    if(flattened)return flattened;
+    if(data.officialInfo || data.reviewTrends)return taggedPayload(data);
+    throw Error('見出しの区切りを認識できませんでした。回答に productName、shopName、officialInfo、reviewTrends、confidence、assessedAt、sources を含めてください。');
   }
   function parseGeneralText(raw){
     const text=String(raw||'').replace(/^\uFEFF/,'').trim();
@@ -725,7 +775,9 @@
 
 【出力形式の厳守】
 ・先頭は YOKAN_TECHO_FORMAT_V1、末尾は YOKAN_TECHO_END。前後に説明やコードブロックを加えない。
-・[英語のフィールド名] を単独行に書き、その次の行から内容を書く。記号や引用符のエスケープは不要。未確認の項目は何も書かず次の見出しへ。
+・角括弧は必須：[officialInfo] [reviewTrends] [sources] を省略せず、必ず1行に1見出しとする。見出しと本文を同じ行に連結しない。
+・[英語のフィールド名] を単独行に書き、その次の行から内容を書く。記号や引用符のエスケープは不要。未確認の項目は空欄のまま次の見出しへ。
+・送信前に必ず確認：角括弧付き見出しが全部存在するか、[officialInfo] と [reviewTrends] の本文があるか、最後の YOKAN_TECHO_END が独立した行か。
 ・ingredients（原材料表示）、materials（主材料の分類）、textures（公式に明記の食感）、styles（仕立て）は「、」区切りの文字列。配列・波括弧・JSON記号は使用しない。
 ・[officialInfo] と [reviewTrends] の本文中では【原材料】【食感】【件数】などの日本語小見出しを使ってよい。途中改行してもよい。
 ・[sources] は「URL | ページ名 | YYYY-MM-DDまたは日付不明」を1行に1件ずつ書く。確認したページだけを書く。
@@ -790,7 +842,7 @@ YOKAN_TECHO_END
         document.body.appendChild(ta);
         try{ta.focus();ta.select();if(!document.execCommand('copy'))throw Error('copy unsupported');}finally{ta.remove();}
       }
-      copyStatus(button,'v5.7・JSON不要の調査依頼をコピーしました。ChatGPTへ貼り付けてください。',true);
+      copyStatus(button,'v5.8・書式を強化した調査依頼をコピーしました。ChatGPTへ貼り付けてください。',true);
       toast('✓ コピーしました');
     }catch(e){
       console.error(e);

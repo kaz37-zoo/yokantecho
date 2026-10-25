@@ -346,7 +346,7 @@
     </svg>`;
   }
   // QUALITYは [key, label, low, high, short] の配列。
-  function renderScoreTable(personal,hist){return `<table class="compare-table"><thead><tr><th>項目</th><th>今回</th><th>比較平均</th></tr></thead><tbody>${QUALITY.map(([key,label])=>`<tr><td>${esc(label)}</td><td>${fmt(num(personal?.[key]))}</td><td>${fmt(hist.scores[key])}</td></tr>`).join('')}</tbody></table>`;}
+  function renderScoreTable(personal,hist){return `<table class="compare-table"><thead><tr><th>項目</th><th>今回</th><th>比較平均</th></tr></thead><tbody>${QUALITY.map(([key,label])=>`<tr><td class="score-label">${esc(label)}</td><td class="value-current">${fmt(num(personal?.[key]))}</td><td class="value-average">${fmt(hist.scores[key])}</td></tr>`).join('')}</tbody></table>`;}
   function profileMarkup(profile){return PROFILE.map(([key,label])=>{const score=num(profile?.[key]);return `<div class="profile-row"><span>${esc(label)}</span><span class="profile-track"><i style="width:${score?score*10:0}%"></i></span><span>${score||'—'}</span></div>`;}).join('');}
   function photoStrip(list){return list?.length?`<div class="photo-strip">${list.map(p=>`<img src="${esc(p)}" alt="記録した写真">`).join('')}</div>`:'';}
   function detailItem(label,value,link=false){return `<div class="meta-item"><span>${esc(label)}</span><div>${link && value?`<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">公式・商品ページを開く</a>`:esc(value||'—')}</div></div>`;}
@@ -376,15 +376,67 @@
     const unclassified=old.matched?'':cleanText(ge?.evidenceSummary||'',7000).trim();
     return {officialInfo,reviewTrends,oldOverview,unclassified};
   }
+  function normalizeProductInfo(raw){
+    if(!raw || typeof raw!=='object' || Array.isArray(raw)) return null;
+    const info={
+      productName: cleanText(raw.productName||raw.officialProductName||'',120).trim(),
+      shopName: cleanText(raw.shopName||raw.officialShopName||'',120).trim(),
+      url: http(raw.url||raw.productUrl||''),
+      method: validMethod(cleanText(raw.method||'',40).trim() || 'その他'),
+      materials: splitTags(raw.materials),
+      textures: splitTags(raw.textures),
+      styles: splitTags(raw.styles)
+    };
+    const hasAny = info.productName || info.shopName || info.url || (info.method && info.method!=='その他') || info.materials.length || info.textures.length || info.styles.length;
+    return hasAny ? info : null;
+  }
+  function labeledBlocks(text){
+    const src=cleanText(text||'',7000).trim();
+    if(!src) return [];
+    const out=[];
+    const re=/【([^】]+)】\s*([\s\S]*?)(?=(?:\n?【[^】]+】)|$)/g;
+    let m;
+    while((m=re.exec(src))!==null){
+      const label=cleanText(m[1],80).trim();
+      const body=cleanText(m[2],2500).trim();
+      if(label && body) out.push({label,body});
+    }
+    if(out.length) return out;
+    return src.split(/\n+/).map(x=>x.trim()).filter(Boolean).map((body,i)=>({label:'メモ'+(i+1),body}));
+  }
+  function researchSectionMarkup(title, text, emptyText){
+    const items=labeledBlocks(text);
+    if(!items.length) return `<div class="research-panel"><h4>${esc(title)}</h4><p class="research-empty">${esc(emptyText)}</p></div>`;
+    return `<div class="research-panel"><h4>${esc(title)}</h4><dl class="research-list">${items.map(item=>`<div class="research-row"><dt>${esc(item.label)}</dt><dd>${esc(item.body)}</dd></div>`).join('')}</dl></div>`;
+  }
+  function productInfoUpdates(record,info){
+    if(!info) return [];
+    const updates=[];
+    const push=(label,from,to,setter)=>{ if(to && from!==to) updates.push({label,from,to,apply:setter}); };
+    push('商品名', record.productName, info.productName, rec=>rec.productName=info.productName);
+    push('和菓子屋', record.shopName, info.shopName, rec=>rec.shopName=info.shopName);
+    push('商品URL', record.url||'', info.url, rec=>rec.url=info.url);
+    if(info.method && info.method!=='その他' && record.taxonomy.method!==info.method) updates.push({label:'製法',from:record.taxonomy.method,to:info.method,apply:rec=>rec.taxonomy.method=info.method});
+    const mergeAxis=(axis,label,vals)=>{
+      if(!vals.length) return;
+      const current=record.taxonomy[axis]||[];
+      const next=[...new Set([...current,...vals])];
+      if(JSON.stringify(current)!==JSON.stringify(next)) updates.push({label,from:current.join('、')||'—',to:next.join('、'),apply:rec=>rec.taxonomy[axis]=next});
+    };
+    mergeAxis('materials','素材・風味',info.materials);
+    mergeAxis('textures','食感・仕上げ',info.textures);
+    mergeAxis('styles','仕立て・呼び名',info.styles);
+    return updates;
+  }
   function generalBlock(r){
     const ge=r.generalEvaluation;
     if(!ge)return `<p class="source-note">公式情報・レビュー傾向は未登録です。「調査依頼をコピー」から取得して追加できます。</p>`;
     const {officialInfo,reviewTrends,oldOverview,unclassified}=officialReviewParts(ge);
     const sources=(Array.isArray(ge.sources)?ge.sources:ge.sources&&typeof ge.sources==='object'?[ge.sources]:[]);
-    return `<p class="source-note">掲載内容は引用元をもとに作成した調査メモです。公式の説明と購入者・実食者の感想は区別して表示します。<br>${ge.assessedAt?`調査日：${esc(ge.assessedAt)}　`:''}情報の確度：${esc(ge.confidence||'不明')}</p>
-      <div class="research-panel"><h4>公式情報</h4><p>${esc(officialInfo||'確認できた公式情報の記述はありません。')}</p></div>
-      <div class="research-panel"><h4>レビュー傾向</h4><p>${esc(reviewTrends||'独立した実食レビューに基づく傾向は確認できていません。')}</p></div>
-      ${(oldOverview||unclassified)?`<details class="legacy-research"><summary>旧形式の調査メモ（分類不能な文章を保管）</summary>${oldOverview?`<p>${esc(oldOverview)}</p>`:''}${unclassified?`<p>${esc(unclassified)}</p>`:''}</details>`:''}
+    return `<div class="research-meta">${ge.assessedAt?`<span>調査日：${esc(ge.assessedAt)}</span>`:''}<span>情報の確度：${esc(ge.confidence||'不明')}</span></div>
+      ${researchSectionMarkup('公式情報',officialInfo,'確認できた公式情報はありません。')}
+      ${researchSectionMarkup('レビュー傾向',reviewTrends,'独立した実食レビューに基づく傾向は確認できていません。')}
+      ${(oldOverview||unclassified)?`<details class="legacy-research"><summary>旧形式の調査メモを開く</summary>${oldOverview?`<p>${esc(oldOverview)}</p>`:''}${unclassified?`<p>${esc(unclassified)}</p>`:''}</details>`:''}
       ${sources.length?`<div class="source-links"><h4>確認した情報源</h4>${sources.map(src=>{const link=http(src?.url);return link?`<div><a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(src.label||link)}</a>${src.publishedAt?`（${esc(src.publishedAt)}）`:''}</div>`:'';}).join('')}</div>`:''}`;
   }
   function compareOptions(record){const t=record.taxonomy||taxonomyFromRecord(record);
@@ -407,16 +459,16 @@
     $('detailContent').innerHTML=`
       <header class="sheet-head"><div><span class="small-overline">YOKAN DETAIL</span><h2>${esc(r.productName)}</h2><p class="detail-shop">${esc(r.shopName)}</p></div><button class="plain-btn" data-action="close">閉じる</button></header>
       <div class="detail-heading">${productPhoto(r)?`<img class="detail-image" src="${esc(productPhoto(r))}" alt="商品写真">`:''}<div class="action-row"><button class="secondary-btn small-btn" data-action="edit">商品情報を編集</button>${actions}</div>${isTasted?`<p class="sample-note">好み分析：${r.includeInPreference===false?'対象外':'対象'}　<button type="button" class="inline-action" data-action="toggle-preference">${r.includeInPreference===false?'好みの分析に含める':'好みの分析から除外する'}</button></p>`:''}</div>
-      <section class="detail-section"><h3>商品情報</h3><div class="meta-grid">${detailItem('製法',r.taxonomy.method)}${detailItem('素材・風味',r.taxonomy.materials.join('、'))}${detailItem('食感・仕上げ',r.taxonomy.textures.join('、'))}${detailItem('仕立て・呼び名',r.taxonomy.styles.join('、'))}${detailItem('購入・入手先',r.purchasePlace)}${detailItem('購入日',fmtDate(r.purchaseDate))}${detailItem('賞味期限',fmtDate(r.bestBefore))}${detailItem('商品URL',r.url,true)}</div>${r.memo?`<p class="comment-block">${esc(r.memo)}</p>`:''}${photoStrip(r.photos)}</section>
+      <section class="detail-section"><h3>商品情報</h3><div class="meta-grid">${detailItem('製法',r.taxonomy.method)}${detailItem('素材・風味',r.taxonomy.materials.join('、'))}${detailItem('食感・仕上げ',r.taxonomy.textures.join('、'))}${detailItem('仕立て・呼び名',r.taxonomy.styles.join('、'))}${detailItem('購入・入手先',r.purchasePlace)}${detailItem('購入日',fmtDate(r.purchaseDate))}${detailItem('賞味期限',fmtDate(r.bestBefore))}${detailItem('商品URL',r.url,true)}</div>${r.memo?`<p class="comment-block note-block">${esc(r.memo)}</p>`:''}${photoStrip(r.photos)}</section>
       ${isTasted?`
-      <section class="detail-section plot-block"><div class="evaluation-heading"><h3>個人的な評価</h3><button type="button" class="secondary-btn small-btn" data-action="edit-latest">評価を編集する</button></div><p class="helper">直近の採点を、全商品平均またはこの商品の分類別平均と比較します。</p>
+      <section class="detail-section plot-block"><div class="evaluation-heading"><h3>個人的な評価</h3><button type="button" class="secondary-btn small-btn" data-action="edit-latest">評価を編集する</button></div>
         <label class="field compact-field"><span>レーダーチャートの比較対象</span><select id="compareScope">${options.map(o=>`<option value="${esc(o.value)}" ${scope===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}</select></label>
         <div id="comparisonPanel">${comparisonMarkup(r,scope)}</div></section>
       <section class="detail-section"><h3>食べた記録 <small>（${r.sessions.length}回）</small></h3>
-        ${allSessions.map((sess,i)=>`<article class="session-card"><h4>${fmtDate(sess.tastedDate)}　${i===0?'<span class="pill">最新</span>':''}</h4><div class="session-score">総合評価 ${fmt(num(sess.quality?.overall))} / 10</div><p>量：${esc(sess.amount||'未記録')} ／ 合わせたもの：${esc(sess.pairing||'なし')}</p><p>${esc(sess.servingTemp)} ／ ${esc(sess.sliceThickness)}</p>${sess.comment?`<div class="comment-block">${esc(sess.comment)}</div>`:''}${sess.visualNote?`<p>見た目：${esc(sess.visualNote)}</p>`:''}${photoStrip(sess.photos)}<div class="action-row"><button class="secondary-btn small-btn" data-session="${esc(sess.id)}">この回を編集</button></div></article>`).join('')}</section>
+        ${allSessions.map((sess,i)=>`<article class="session-card"><h4>${fmtDate(sess.tastedDate)}　${i===0?'<span class="pill">最新</span>':''}</h4><div class="session-score">総合評価 <strong>${fmt(num(sess.quality?.overall))}</strong><span>/ 10</span></div><div class="session-meta-grid"><div><span>量</span><strong>${esc(sess.amount||'未記録')}</strong></div><div><span>合わせたもの</span><strong>${esc(sess.pairing||'なし')}</strong></div><div><span>温度</span><strong>${esc(sess.servingTemp)}</strong></div><div><span>切る厚さ</span><strong>${esc(sess.sliceThickness)}</strong></div></div>${sess.comment?`<div class="comment-block session-comment">${esc(sess.comment)}</div>`:''}${sess.visualNote?`<p class="session-visual"><span>見た目</span>${esc(sess.visualNote)}</p>`:''}${photoStrip(sess.photos)}<div class="action-row"><button class="secondary-btn small-btn" data-session="${esc(sess.id)}">この回を編集</button></div></article>`).join('')}</section>
       <section class="detail-section"><h3>直近の味わい</h3><p class="helper">良し悪しでなく特徴の強さを記録</p>${profileMarkup(s.profile)}</section>
       `:`<section class="detail-section"><p class="lead">${r.status==='stock'?'購入済み。食べたら評価を追加して手帖へ移せます。':'気になっている羊羹。購入したらストックに移せます。'}</p></section>`}
-      <section class="detail-section"><h3>公式情報とレビュー傾向</h3><p class="helper">ChatGPTで公式情報とレビュー傾向を調査し、文章と出典だけを追加します。10段階の採点はしません。</p>
+      <section class="detail-section"><h3>公式情報とレビュー傾向</h3>
         ${generalBlock(r)}
         <button class="secondary-btn" data-action="copy" type="button">調査依頼をコピー</button>
         <details class="import-box"><summary>調査結果のJSONを貼って取り込む</summary><p class="source-note">この商品の店名・商品名が一致するかも確認します。</p><label class="field">ChatGPTの回答<textarea id="generalJSON" rows="9" placeholder='{"schemaVersion":2,"productName":"..."}'></textarea></label><div class="action-row"><button class="primary-btn" data-action="import-general" type="button">この商品に取り込む</button>${r.generalEvaluation?'<button class="danger-btn" data-action="delete-general">調査メモを削除</button>':''}</div><p id="jsonImportStatus" class="import-feedback" role="status" aria-live="polite"></p></details></section>`;
@@ -439,10 +491,11 @@
     if(!notes.officialInfo&&!notes.reviewTrends&&!notes.oldOverview&&!notes.unclassified&&!sources.length){
       throw Error('公式情報・レビュー傾向・出典がありません。調査結果を貼り付けてください。');
     }
-    return {schemaVersion:2,officialInfo:notes.officialInfo,reviewTrends:notes.reviewTrends,
+    return {schemaVersion:3,officialInfo:notes.officialInfo,reviewTrends:notes.reviewTrends,
       // 古い数値付きの調査結果を取り込んでも、その値は参考表示に利用しない。
       summary:notes.oldOverview,evidenceSummary:cleanText(ge.evidenceSummary||'',7000),
       legacyScores:ge.scores && typeof ge.scores==='object' && !Array.isArray(ge.scores)?structuredClone(ge.scores):null,
+      productInfo: normalizeProductInfo(raw.productInfo||ge.productInfo||null),
       confidence:['low','medium','high'].includes(ge.confidence)?ge.confidence:'unverified',
       assessedAt:cleanText(ge.assessedAt||raw.assessedAt||'',40),sources,importedAt:new Date().toISOString()};
   }
@@ -541,14 +594,14 @@
 商品名：${r?.productName||'（商品名を入力）'}
 和菓子屋：${r?.shopName||'（店名を入力）'}
 
-【目的】ようかん手帖に「公式情報」と「レビュー傾向」を別々に記録すること。
+【目的】ようかん手帖に「公式情報」と「レビュー傾向」を別々に記録し、確認できた公式商品情報があれば商品情報も補正候補として返すこと。
 【厳守】
 - 数値評価・推定スコア・ランキングは不要。架空の点数を絶対に作らない。
 - officialInfo：メーカー公式に明記された原材料、製法、種類、特徴、保存期間など。一次情報がない場合は「確認できず」と明記。商品サイズや派生商品の情報を混同しない。
 - reviewTrends：実食者が実際に書いた味・香り・食感の傾向。確認したレビュー件数、少数の場合の限界、異なる意見を簡潔に記載。十分なレビューがない場合は「傾向を判断できない」と明記。
 - 公式の特徴を口コミの事実に転用しない。AIの推測はレビュー事実として断定しない。
 - 実際に確認したURLのみ sources に記載する。公開日が不明なら「日付不明」。見つからない情報は書かない。
-- JSONオブジェクトだけを返す。普通の半角ダブルクォーテーションを使用。sourcesは必ず [ ] で囲んだ配列にする。
+- JSONオブジェクトだけを返す。普通の半角ダブルクォーテーションを使用。sourcesは必ず [ ] で囲んだ配列にする。productInfo も返す場合は同じJSON内に含める。
 - 情報が足りない場合も架空の内容を補わず「確認できず」と返す。
 
 次のJSONスキーマとキー名を完全に守る：
@@ -556,6 +609,15 @@
   "schemaVersion": 2,
   "productName": ${JSON.stringify(r?.productName||'商品名')},
   "shopName": ${JSON.stringify(r?.shopName||'店名')},
+  "productInfo": {
+    "productName": "公式表記の商品名。確認できなければ既存値と同じで可",
+    "shopName": "公式表記の店名。確認できなければ既存値と同じで可",
+    "url": "公式の商品URL。なければ空文字",
+    "method": "練羊羹 / 水羊羹 / 蒸羊羹 / 芋羊羹 / その他 のいずれか",
+    "materials": ["小豆"],
+    "textures": ["なめらか"],
+    "styles": ["本煉"]
+  },
   "generalEvaluation": {
     "officialInfo": "公式サイトで確認できた事実のみを簡潔にまとめた文章",
     "reviewTrends": "実食レビューの傾向・件数・不足している根拠をまとめた文章",
@@ -566,7 +628,7 @@
     ]
   }
 }
-confidenceはhigh/medium/lowから選択。sources は必ず配列。実在する出典がなければ空配列 []。`;} 
+confidenceはhigh/medium/lowから選択。sources は必ず配列。実在する出典がなければ空配列 []。productInfo は公式で確認できた項目だけを入れ、確認できない要素は空欄または空配列。`;} 
   function copyStatus(button,message,ok,copyContent=''){
     if(!button)return;
     if(!button.dataset.originalLabel)button.dataset.originalLabel=button.textContent;
@@ -607,14 +669,28 @@ confidenceはhigh/medium/lowから選択。sources は必ず配列。実在す�
     const input=$('generalJSON'),raw=input?.value||'';
     try{
       const payload=parseGeneralText(raw),ge=normalizeGeneral(payload,r);
-      await putMany([{...r,generalEvaluation:ge,updatedAt:new Date().toISOString()}]);
+      const next={...r,generalEvaluation:ge,updatedAt:new Date().toISOString()};
+      const updates=productInfoUpdates(r,ge.productInfo);
+      if(updates.length){
+        const message=`公式情報から商品情報の修正候補が見つかりました。取得した情報に変更しますか？\n\n${updates.map(u=>`・${u.label}\n  ${u.from||'—'} → ${u.to||'—'}`).join('\n')}`;
+        if(confirm(message)){
+          const draft=structuredClone(next);
+          draft.taxonomy={...draft.taxonomy,materials:[...draft.taxonomy.materials],textures:[...draft.taxonomy.textures],styles:[...draft.taxonomy.styles]};
+          updates.forEach(u=>u.apply(draft));
+          draft.updatedAt=new Date().toISOString();
+          await putMany([draft]);
+          await reload();openDetail(draft.id);toast('調査メモと商品情報を更新しました');
+          const feedback=$('jsonImportStatus');if(feedback)feedback.textContent='✓ 公式情報とレビュー傾向を取り込み、商品情報にも反映しました';
+          return;
+        }
+      }
+      await putMany([next]);
       await reload();openDetail(r.id);toast('公式情報とレビュー傾向を取り込みました');
       const feedback=$('jsonImportStatus');if(feedback)feedback.textContent='✓ 公式情報とレビュー傾向を取り込みました';
     }catch(e){
       console.error(e);
       const feedback=$('jsonImportStatus');
       if(feedback)feedback.textContent=`取り込めませんでした：${e.message}`;
-      // 入力された文章は消さない。エラー箇所を確認して再試行可能。
       if(input && input.value!==raw)input.value=raw;
     }
   }

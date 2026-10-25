@@ -264,6 +264,7 @@
   function tasteEditor(record,session=null){
     close(detailDialog);$('tasteForm').reset();$('tasteProductId').value=record.id;$('tasteId').value=session?.id||'';
     $('tasteHeading').textContent=session?'実食記録を編集':`${record.productName} を食べた記録`;
+    $('tasteSaveButton').textContent=session?'変更を保存する':'この回を保存する';
     $('tastedDate').value=session?.tastedDate||today();$('amount').value=session?.amount||'';
     $('servingTemp').value=session?.servingTemp||'常温';$('sliceThickness').value=session?.sliceThickness||'標準';$('pairing').value=session?.pairing||'';
     $('comment').value=session?.comment||'';$('visualNote').value=session?.visualNote||'';
@@ -327,14 +328,14 @@
     const r=get(rid);if(!r)return;state.activeId=r.id;const isTasted=r.sessions.length>0,s=latest(r);
     const options=compareOptions(r);let scope=state.compareScopes[r.id]||options.find(o=>o.value.startsWith('method:'))?.value||'all';
     if(!options.some(o=>o.value===scope))scope='all';
-    const actions=isTasted?`<button class="primary-btn small-btn" data-action="taste">＋ もう一度食べた</button>`:r.status==='stock'?`<button class="primary-btn small-btn" data-action="taste">食べたので評価する</button>`:`<button class="primary-btn small-btn" data-action="stock">購入した → ストックへ</button>`;
+    const actions=isTasted?`<button class="primary-btn small-btn" data-action="edit-latest">最新の評価を編集</button><button class="secondary-btn small-btn" data-action="taste">＋ もう一度食べた</button>`:r.status==='stock'?`<button class="primary-btn small-btn" data-action="taste">食べたので評価する</button>`:`<button class="primary-btn small-btn" data-action="stock">購入した → ストックへ</button>`;
     const allSessions=orderSessions(r);
     $('detailContent').innerHTML=`
       <header class="sheet-head"><div><span class="small-overline">YOKAN DETAIL</span><h2>${esc(r.productName)}</h2><p class="detail-shop">${esc(r.shopName)}</p></div><button class="plain-btn" data-action="close">閉じる</button></header>
       <div class="detail-heading">${productPhoto(r)?`<img class="detail-image" src="${esc(productPhoto(r))}" alt="商品写真">`:''}<div class="action-row"><button class="secondary-btn small-btn" data-action="edit">商品情報を編集</button>${actions}</div>${isTasted?`<p class="sample-note">好み分析：${r.includeInPreference===false?'対象外':'対象'}　<button type="button" class="inline-action" data-action="toggle-preference">${r.includeInPreference===false?'好みの分析に含める':'好みの分析から除外する'}</button></p>`:''}</div>
       <section class="detail-section"><h3>商品情報</h3><div class="meta-grid">${detailItem('製法',r.taxonomy.method)}${detailItem('素材・風味',r.taxonomy.materials.join('、'))}${detailItem('食感・仕上げ',r.taxonomy.textures.join('、'))}${detailItem('仕立て・呼び名',r.taxonomy.styles.join('、'))}${detailItem('購入・入手先',r.purchasePlace)}${detailItem('購入日',fmtDate(r.purchaseDate))}${detailItem('賞味期限',fmtDate(r.bestBefore))}${detailItem('商品URL',r.url,true)}</div>${r.memo?`<p class="comment-block">${esc(r.memo)}</p>`:''}${photoStrip(r.photos)}</section>
       ${isTasted?`
-      <section class="detail-section plot-block"><h3>個人的な評価</h3><p class="helper">直近の採点を、全商品平均またはこの商品の分類別平均と比較します。</p>
+      <section class="detail-section plot-block"><div class="evaluation-heading"><h3>個人的な評価</h3><button type="button" class="secondary-btn small-btn" data-action="edit-latest">評価を編集する</button></div><p class="helper">直近の採点を、全商品平均またはこの商品の分類別平均と比較します。</p>
         <label class="field compact-field"><span>レーダーチャートの比較対象</span><select id="compareScope">${options.map(o=>`<option value="${esc(o.value)}" ${scope===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}</select></label>
         <div id="comparisonPanel">${comparisonMarkup(r,scope)}</div>${generalBlock(r)}</section>
       <section class="detail-section"><h3>食べた記録 <small>（${r.sessions.length}回）</small></h3>
@@ -402,6 +403,7 @@
     switch(btn.dataset.action){
       case 'close':close(detailDialog);break;
       case 'edit':productEditor(r);break;
+      case 'edit-latest':{const session=latest(r);if(session) tasteEditor(r,session);break;}
       case 'taste':tasteEditor(r);break;
       case 'stock':actionStock(rid);break;
       case 'toggle-preference':putMany([{...r,includeInPreference:r.includeInPreference===false,updatedAt:new Date().toISOString()}]).then(reload).then(()=>openDetail(rid)).then(()=>toast('好み分析の対象を更新しました')).catch(e=>{console.error(e);toast('更新できませんでした');});break;
@@ -410,7 +412,69 @@
       case 'delete-general':if(confirm('参考評価を削除しますか？'))putMany([{...r,generalEvaluation:null}]).then(reload).then(()=>openDetail(rid));break;
     }
   }
+  // iOS Safari: 入力中に視覚ビューポートがキーボードで縮小する場合、
+  // エディターだけ高さを合わせる。手動ピンチズームは制限しない。
+  // focus/resizeの直後はキーボードアニメーション中のため短く再確認する。
+  function setupKeyboardViewport(){
+    const editors=[productDialog,tasteDialog];
+    const vv=window.visualViewport;
+    if(!vv) return;
+    let focusScrollTimer;
+    let rafId=0;
+    let baselineHeight=Math.max(window.innerHeight,vv.height);
+    const isTextInput = node => node?.matches?.('input:not([type="range"]):not([type="checkbox"]):not([type="file"]):not([type="hidden"]),textarea,select');
+    const activeEditor = () => editors.find(d=>d.open && d.contains(document.activeElement));
+    const keepVisible = () => {
+      const modal=activeEditor(), target=document.activeElement;
+      if(!modal||!isTextInput(target))return;
+      const modalBounds=modal.getBoundingClientRect();
+      const targetBounds=target.getBoundingClientRect();
+      // 不要なスクロールを避けるため、入力欄がキーボードに隠れた時だけ動かす。
+      if(targetBounds.bottom>modalBounds.bottom-24 || targetBounds.top<modalBounds.top+64){
+        target.scrollIntoView({block:'center',inline:'nearest',behavior:'auto'});
+      }
+    };
+    const update=()=>{
+      rafId=0;
+      if(!activeEditor()) baselineHeight=Math.max(window.innerHeight,vv.height);
+      for(const modal of editors){
+        if(!modal.open) {modal.style.removeProperty('--editor-view-height');continue;}
+        const focused=isTextInput(document.activeElement) && modal.contains(document.activeElement);
+        // Safariではキーボード表示で visualViewport.height が小さくなる。
+        // 通常時や手動ズーム中は標準の100dvhを維持する。
+        const keyboardOpen=focused && vv.scale<=1.03 && vv.height < baselineHeight-110;
+        if(keyboardOpen) modal.style.setProperty('--editor-view-height',`${Math.max(260,Math.floor(vv.height))}px`);
+        else modal.style.removeProperty('--editor-view-height');
+      }
+    };
+    const schedule=()=>{
+      if(rafId) cancelAnimationFrame(rafId);
+      rafId=requestAnimationFrame(update);
+      if(activeEditor()){
+        clearTimeout(focusScrollTimer);
+        focusScrollTimer=setTimeout(()=>{update();keepVisible();},180);
+      }
+    };
+    vv.addEventListener('resize',schedule);
+    // iOSでSafariのツールバーが動く場合も同じ方法で追従。
+    window.addEventListener('resize',schedule);
+    editors.forEach(modal=>{
+      modal.addEventListener('focusin',event=>{
+        if(!isTextInput(event.target))return;
+        schedule();
+      });
+      modal.addEventListener('focusout',()=>{
+        clearTimeout(focusScrollTimer);
+        setTimeout(schedule,60);
+      });
+      modal.addEventListener('close',()=>{
+        modal.style.removeProperty('--editor-view-height');
+        clearTimeout(focusScrollTimer);
+      });
+    });
+  }
   function bind(){
+    setupKeyboardViewport();
     $('addBtn').addEventListener('click',()=>productEditor(null,state.tab==='future'?state.future:'tasted'));
     document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.tab)));
     main.addEventListener('click',handleMainClick);$('detailContent').addEventListener('click',handleDetailClick);

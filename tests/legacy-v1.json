@@ -1,0 +1,18 @@
+{
+  "app": "羊羹手帖",
+  "version": 1,
+  "records": [
+    {
+      "id": "v1-sample-record",
+      "productName": "サンプル羊羹",
+      "shopName": "見本菓子舗",
+      "tastedDate": "2026-09-19",
+      "yokanType": "練羊羹",
+      "quality": {"ingredientFlavor": 9, "sweetBalance": 8, "texture": 8, "aftertaste": 7, "repeat": 8, "overall": 8},
+      "profile": {"sweetness": 6, "aroma": 7, "richness": 7, "firmness": 5, "smoothness": 9, "finishLength": 6},
+      "comment": "旧データの感想",
+      "pairing": "煎茶",
+      "photos": []
+    }
+  ]
+}

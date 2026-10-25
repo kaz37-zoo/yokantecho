@@ -1,0 +1,21 @@
+{
+  "app": "ようかん手帖",
+  "version": 2,
+  "records": [
+    {
+      "id": "v2-sample-record",
+      "productName": "サンプル羊羹弐",
+      "shopName": "見本菓子舗",
+      "tastedDate": "2026-10-01",
+      "quality": {"ingredientFlavor": 8, "sweetBalance": 8, "texture": 7, "aftertaste": 9, "repeat": 7, "overall": 8},
+      "profile": {"sweetness": 5, "aroma": 6, "richness": 6, "firmness": 4, "smoothness": 7, "finishLength": 8},
+      "generalEvaluation": {
+        "scores": {"ingredientFlavor": 8, "sweetBalance": 7, "texture": 8, "aftertaste": 7, "repeat": 8, "overall": 8},
+        "summary": "検証用のダミー評価",
+        "confidence": "low",
+        "sources": []
+      },
+      "photos": []
+    }
+  ]
+}

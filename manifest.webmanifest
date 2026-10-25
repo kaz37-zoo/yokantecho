@@ -1,14 +1,22 @@
 {
-  "name": "羊羹手帖",
-  "short_name": "羊羹手帖",
-  "description": "羊羹の味わいと個人的な評価を記録する手帖アプリ",
+  "name": "ようかん手帖",
+  "short_name": "ようかん手帖",
+  "description": "羊羹を製法・素材・食感で整理し、実食記録、分類別評価比較、ランキングを管理する手帖",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4efe6",
-  "theme_color": "#6f574a",
+  "background_color": "#f5f0e8",
+  "theme_color": "#f4efe8",
   "lang": "ja",
   "icons": [
-    { "src": "./icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "./icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }

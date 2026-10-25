@@ -1,181 +1,81 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#6f574a" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="羊羹手帖" />
-  <title>羊羹手帖</title>
-  <link rel="manifest" href="./manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="./icon-180.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@400;600&family=Yuji+Syuku&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4efe8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ようかん手帖">
+  <title>ようかん手帖</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Kiwi+Maru:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div id="app" class="app-shell">
+  <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">味わいを、言葉と数字で残す</p>
-        <h1>羊羹手帖</h1>
-      </div>
-      <button id="addBtn" class="primary-btn compact" type="button">＋ 記録</button>
+      <h1>ようかん手帖</h1>
+      <button id="addBtn" class="primary-btn" type="button">＋ 記録</button>
     </header>
-
-    <main id="mainView" class="main-view" aria-live="polite"></main>
-
-    <nav class="bottom-nav" aria-label="メインナビゲーション">
-      <button class="nav-item active" data-view="records" type="button">
-        <span class="nav-label">手帖</span>
-      </button>
-      <button class="nav-item" data-view="analysis" type="button">
-        <span class="nav-label">好み</span>
-      </button>
-      <button class="nav-item" data-view="guide" type="button">
-        <span class="nav-label">評価の見方</span>
-      </button>
+    <main id="main" class="main-view" aria-live="polite"></main>
+    <nav class="tabbar" aria-label="アプリのタブ">
+      <button type="button" class="tab active" data-tab="techo">手帖</button>
+      <button type="button" class="tab" data-tab="future">これからの羊羹</button>
+      <button type="button" class="tab" data-tab="analysis">好み</button>
+      <button type="button" class="tab" data-tab="guide">使い方</button>
     </nav>
   </div>
 
-  <dialog id="editorDialog" class="editor-dialog">
-    <form id="recordForm" method="dialog" class="editor-form">
-      <div class="editor-head">
-        <div>
-          <p class="eyebrow">TASTING NOTE</p>
-          <h2 id="editorTitle">羊羹を記録</h2>
-        </div>
-        <button id="closeEditorBtn" class="text-btn" type="button">閉じる</button>
-      </div>
-
-      <input type="hidden" id="recordId" />
-
+  <dialog id="productDialog" class="sheet">
+    <form id="productForm" class="sheet-inner">
+      <div class="sheet-head"><div><span class="small-overline">YOKAN NOTE</span><h2 id="productHeading">羊羹を登録</h2></div><button id="productClose" type="button" class="plain-btn">閉じる</button></div>
+      <input id="productId" type="hidden">
       <section class="form-section">
-        <h3>基本情報</h3>
-        <div class="field-grid two">
-          <label class="field">
-            <span>商品名 <b>必須</b></span>
-            <input id="productName" required autocomplete="off" placeholder="例：夜の梅" />
-          </label>
-          <label class="field">
-            <span>和菓子屋 <b>必須</b></span>
-            <input id="shopName" required autocomplete="off" placeholder="例：虎屋" />
-          </label>
+        <label class="field"><span>商品名 <em>必須</em></span><input id="productName" required placeholder="例：夜の梅" maxlength="120"></label>
+        <label class="field"><span>和菓子屋 <em>必須</em></span><input id="shopName" required placeholder="例：とらや" maxlength="120"></label>
+        <label class="field"><span>現在の状態</span><select id="productStatus"><option value="tasted">食べた・評価する</option><option value="stock">ストック（購入済み）</option><option value="wishlist">食べたい（未購入）</option></select></label>
+        <div class="classification-editor">
+          <h3>羊羹の分類</h3>
+          <p class="helper">製法・素材・食感をそれぞれ記録できます。小城羊羹や小倉のような呼び方は「仕立て・呼び名」に追加してください。</p>
+          <label class="field"><span>① 製法・基本構造</span><select id="yokanType"><option>練羊羹</option><option>水羊羹</option><option>蒸羊羹</option><option>芋羊羹</option><option>その他</option></select></label>
+          <div id="taxonomySelectors"></div>
+          <label class="check-row"><input id="includePreference" type="checkbox" checked><span>「好みの分析」に含める</span></label>
+          <p class="helper">オフにしても記録・全商品平均・総合ランキング・種類別ランキングには残ります。</p>
         </div>
-        <div class="field-grid two">
-          <label class="field">
-            <span>食べた日</span>
-            <input id="tastedDate" type="date" />
-          </label>
-          <label class="field">
-            <span>購入・入手した場所</span>
-            <input id="purchasePlace" autocomplete="off" placeholder="本店、百貨店、もらい物 など" />
-          </label>
+        <label class="field"><span>商品ページURL</span><input id="productUrl" type="url" placeholder="https://..." inputmode="url"></label>
+        <label class="field"><span>購入場所・入手先</span><input id="purchasePlace" placeholder="本店、百貨店など"></label>
+        <div class="two-col">
+          <label class="field"><span>購入日（任意）</span><input id="purchaseDate" type="date"></label>
+          <label class="field"><span>賞味期限（任意）</span><input id="bestBefore" type="date"></label>
         </div>
-        <div class="field-grid two">
-          <label class="field">
-            <span>羊羹の種類</span>
-            <select id="yokanType">
-              <option value="練羊羹">練羊羹</option>
-              <option value="水羊羹">水羊羹</option>
-              <option value="蒸羊羹">蒸羊羹</option>
-              <option value="小城羊羹">小城羊羹</option>
-              <option value="芋羊羹">芋羊羹</option>
-              <option value="その他">その他</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>主な風味・素材</span>
-            <input id="flavorTags" autocomplete="off" placeholder="小倉、栗、黒糖、抹茶、白小豆…" />
-          </label>
-        </div>
-        <div class="field-grid three">
-          <label class="field">
-            <span>食べた温度</span>
-            <select id="servingTemp">
-              <option value="常温">常温</option>
-              <option value="冷やした">冷やした</option>
-              <option value="やや冷たい">やや冷たい</option>
-              <option value="その他">その他</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>切る厚さ</span>
-            <select id="sliceThickness">
-              <option value="標準">標準</option>
-              <option value="薄め">薄め</option>
-              <option value="厚め">厚め</option>
-              <option value="一口羊羹">一口羊羹</option>
-              <option value="不明">不明</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>合わせた飲み物</span>
-            <input id="pairing" autocomplete="off" placeholder="煎茶、抹茶、珈琲…" />
-          </label>
-        </div>
+        <label class="field"><span>気になる点・ストックメモ</span><textarea id="productMemo" rows="3" placeholder="購入した理由、食べてみたいポイントなど"></textarea></label>
+        <div class="field"><span>商品写真（最大3枚）</span><label class="photo-picker">写真を追加<input id="productPhotos" type="file" accept="image/*" multiple></label><div id="productPhotoPreview" class="photo-preview"></div></div>
       </section>
-
-      <section class="form-section">
-        <div class="section-title-row">
-          <div>
-            <h3>味わいプロファイル</h3>
-            <p>良し悪しではなく、その羊羹の「特徴」を1〜10で記録します。</p>
-          </div>
-        </div>
-        <div id="profileSliders" class="rating-list"></div>
-      </section>
-
-      <section class="form-section">
-        <div class="section-title-row">
-          <div>
-            <h3>個人的な評価</h3>
-            <p>こちらは10に近いほど「自分にとって良かった」という採点です。</p>
-          </div>
-        </div>
-        <div id="qualitySliders" class="rating-list"></div>
-      </section>
-
-      <section class="form-section">
-        <h3>写真</h3>
-        <p class="helper">商品・断面・包装など最大3枚。端末内で縮小して保存します。</p>
-        <label class="photo-picker">
-          <input id="photoInput" type="file" accept="image/*" multiple />
-          <span>写真を追加</span>
-        </label>
-        <div id="photoPreview" class="photo-preview"></div>
-      </section>
-
-      <section class="form-section">
-        <h3>コメント</h3>
-        <label class="field">
-          <span>味・香り・食感・印象</span>
-          <textarea id="comment" rows="6" placeholder="例：最初はしっかり甘いが、後半に小豆の香りが戻る。舌触りは非常になめらか。ほうじ茶と合わせると後味が軽くなった。"></textarea>
-        </label>
-        <label class="field">
-          <span>断面・見た目メモ（任意）</span>
-          <textarea id="visualNote" rows="3" placeholder="艶、粒の見え方、色、気泡、包丁の入り方など"></textarea>
-        </label>
-      </section>
-
-      <div class="editor-actions">
-        <button id="deleteBtn" class="danger-btn hidden" type="button">この記録を削除</button>
-        <button class="primary-btn" type="submit">保存する</button>
-      </div>
+      <div class="sheet-actions"><button id="deleteProduct" type="button" class="danger-btn hidden">この羊羹を削除</button><button class="primary-btn" type="submit">保存して進む</button></div>
     </form>
   </dialog>
 
-  <template id="emptyTemplate">
-    <section class="empty-state">
-      <div class="empty-mark">羊羹</div>
-      <h2>最初の一棹を記録しましょう</h2>
-      <p>味の強さと「好き」を分けて残すと、食べるほど自分の好みが見えてきます。</p>
-      <button class="primary-btn" data-empty-add type="button">最初の記録をつける</button>
-    </section>
-  </template>
+  <dialog id="tasteDialog" class="sheet">
+    <form id="tasteForm" class="sheet-inner">
+      <div class="sheet-head"><div><span class="small-overline">TASTING</span><h2 id="tasteHeading">食べた記録を追加</h2></div><button id="tasteClose" type="button" class="plain-btn">閉じる</button></div>
+      <input id="tasteProductId" type="hidden"><input id="tasteId" type="hidden">
+      <section class="form-section">
+        <div class="two-col"><label class="field"><span>食べた日</span><input id="tastedDate" type="date" required></label><label class="field"><span>食べた量</span><input id="amount" placeholder="例：50g、2切れ"></label></div>
+        <div class="two-col"><label class="field"><span>食べた温度</span><select id="servingTemp"><option>常温</option><option>冷やした</option><option>やや冷たい</option><option>その他</option></select></label><label class="field"><span>切る厚さ</span><select id="sliceThickness"><option>標準</option><option>薄め</option><option>厚め</option><option>一口羊羹</option><option>不明</option></select></label></div>
+        <label class="field"><span>合わせたもの・飲み物</span><input id="pairing" placeholder="煎茶・抹茶・クリームチーズなど"></label>
+      </section>
+      <section class="form-section"><h3>味わいの特徴</h3><p class="helper">強い・弱いなどの個性です。高得点＝高品質ではありません。</p><div id="profileSliders"></div></section>
+      <section class="form-section"><h3>個人的な評価</h3><p class="helper">こちらは10点に近いほど高評価。総合評価は独立して採点します。</p><div id="qualitySliders"></div></section>
+      <section class="form-section"><label class="field"><span>今回の印象・コメント</span><textarea id="comment" rows="4" placeholder="前回との違い、味、香りなど"></textarea></label><label class="field"><span>断面・見た目</span><textarea id="visualNote" rows="2" placeholder="艶や色など"></textarea></label><div class="field"><span>今回の写真（最大3枚）</span><label class="photo-picker">写真を追加<input id="tastePhotos" type="file" accept="image/*" multiple></label><div id="tastePhotoPreview" class="photo-preview"></div></div></section>
+      <div class="sheet-actions"><button id="deleteTaste" type="button" class="danger-btn hidden">この回の記録を削除</button><button class="primary-btn" type="submit">この回を保存する</button></div>
+    </form>
+  </dialog>
 
+  <dialog id="detailDialog" class="sheet detail-sheet"><div id="detailContent" class="sheet-inner"></div></dialog>
   <script src="./app.js" defer></script>
 </body>
 </html>

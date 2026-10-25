@@ -239,8 +239,8 @@
     <section class="guide-card"><h3>記録の流れ</h3><p>「これからの羊羹」では未購入を食べたいリストに、購入済みをストックに保存。購入したらストックに、食べたら個人評価を登録して手帖へ移動します。すでに食べた商品は「もう一度食べた」から2回目・3回目を追加できます。</p></section>
     <section class="guide-card"><h3>分類のしくみ</h3><p>「製法」は練・蒸・水などから1つ選択。「素材・風味」と「食感・仕上げ」は複数選択できます。「本煉」「小倉」「小城羊羹」は補助の「仕立て・呼び名」に登録できます。</p><p>例：小城羊羹は「練羊羹 ＋ シャリシャリ ＋ 小城羊羹」。製法が同じものとも、シャリシャリ系だけでも比べられます。以前の記録は可能な範囲で自動分類し、いつでも編集可能です。</p></section>
     <section class="guide-card"><h3>平均とランキング</h3><p>レーダーチャートの比較対象を「全商品平均」「同じ製法」「同じ素材」「同じ食感」などから切り替えられます。「好み」タブでは総合ランキングと種類別ランキングの切り替えもできます。</p><p>平均は商品ごとに実食回数の平均を計算してから、商品単位で等重み平均します。好みのプロファイル分析は、指定した高評価商品だけが対象です。変わり種を好み分析から除外しても、全商品平均とランキングには残ります。</p></section>
-    <section class="guide-card"><h3>評価の使い分け</h3><p>甘さ・濃厚さ・かたさなどのプロファイルは強さを記録するもの。素材の風味・甘味のバランス・食感・後味・また食べたい・総合評価は好みの10段階評価です。</p><p>公開情報からの参考評価（AIによる推定）は別の系列として表示します。</p></section>
-    <section class="guide-card"><h3>一般的な評価を取り込む</h3><p>記録の詳細で「評価依頼をコピー」→ ChatGPTへ貼り付け → 返ってきた回答をそのまま貼り付けて取り込みます。コードブロックや組版引用符は自動で読み替えます。根拠の確認できない項目は空欄のままとし、推測で埋めません。</p><button class="secondary-btn" id="blankPrompt">空欄テンプレートをコピー</button></section>
+    <section class="guide-card"><h3>評価の使い分け</h3><p>甘さ・濃厚さ・かたさなどのプロファイルは強さを記録するもの。素材の風味・甘味のバランス・食感・後味・また食べたい・総合評価は好みの10段階評価です。</p><p>公式情報とレビュー傾向（AIによる推定）は別の系列として表示します。</p></section>
+    <section class="guide-card"><h3>公式情報とレビュー傾向を取り込む</h3><p>商品詳細の「調査依頼をコピー」→ ChatGPTに貼り付け → 返ってきたJSONを取り込みます。公式情報と実食レビューの傾向だけを記録し、ChatGPTによる数値評価は行いません。通常の半角引用符で書かれたJSONを推奨します。装飾引用符・sources配列記号の欠落を一部補正できます。</p><button class="secondary-btn" id="blankPrompt">空欄テンプレートをコピー</button></section>
     <section class="guide-card"><h3>バックアップ・移行</h3><p>写真を含むJSONを保存できます。旧バージョンのバックアップ（v1/v2/v3）の records をそのまま取り込めます。重複IDは既存の実食履歴を保持して統合します。機種変更前には必ず書き出してください。</p><div class="action-row"><button id="export" class="secondary-btn">JSONバックアップを書き出す</button><label class="photo-picker">JSONを取り込む<input type="file" id="import" accept=".json,application/json"></label></div><p class="helper">ブラウザ内のデータはサイトデータ消去などで失われます。自動クラウド同期ではありません。</p></section>`;
     $('blankPrompt').addEventListener('click',e=>copyPrompt(null,e.currentTarget));$('export').addEventListener('click',exportBackup);$('import').addEventListener('change',e=>{if(e.target.files?.[0])importBackup(e.target.files[0]);});
   }
@@ -335,27 +335,57 @@
   function radarPoint(index,value,radius=107){const angle=-Math.PI/2+2*Math.PI*index/6,dist=radius*(value/10);return [180+Math.cos(angle)*dist,170+Math.sin(angle)*dist];}
   function polygon(scores){return QUALITY.map(([key],i)=>radarPoint(i,num(scores?.[key])||0).map(n=>n.toFixed(1)).join(',')).join(' ');}
   function complete(scores){return QUALITY.every(([key])=>num(scores?.[key])!==null);}
-  function radarSvg(personal,hist,general){
+  function radarSvg(personal,hist){
     const labelPositions=[[180,24,'middle'],[324,85,'end'],[324,266,'end'],[180,322,'middle'],[36,266,'start'],[36,85,'start']];
     return `<svg class="radar-svg" viewBox="0 0 360 346" aria-label="個人評価・これまでの平均のレーダーチャート" role="img">
       ${[2,4,6,8,10].map(level=>`<polygon class="radar-grid" points="${polygon(Object.fromEntries(QUALITY.map(([k])=>[k,level])))}"></polygon>`).join('')}
       ${QUALITY.map((field,i)=>{const [x,y]=radarPoint(i,10);return `<line class="radar-axis" x1="180" y1="170" x2="${x}" y2="${y}"></line>`;}).join('')}
       ${complete(hist.scores)?`<polygon class="radar-poly average" points="${polygon(hist.scores)}"></polygon>`:''}
       ${complete(personal)?`<polygon class="radar-poly personal" points="${polygon(personal)}"></polygon>`:''}
-      ${complete(general)?`<polygon class="radar-poly general" points="${polygon(general)}"></polygon>`:''}
       ${QUALITY.map((field,i)=>{const label=field[1],short=field[4];const [x,y,a]=labelPositions[i];return `<text class="radar-label" x="${x}" y="${y}" text-anchor="${a}">${esc(short||label)}</text>`;}).join('')}
     </svg>`;
   }
   // QUALITYは [key, label, low, high, short] の配列。
-  function renderScoreTable(personal,hist,general){return `<table class="compare-table"><thead><tr><th>項目</th><th>今回</th><th>比較平均</th>${general?'<th>参考評価</th>':''}</tr></thead><tbody>${QUALITY.map(([key,label])=>`<tr><td>${esc(label)}</td><td>${fmt(num(personal?.[key]))}</td><td>${fmt(hist.scores[key])}</td>${general?`<td>${fmt(num(general[key]))}</td>`:''}</tr>`).join('')}</tbody></table>`;}
+  function renderScoreTable(personal,hist){return `<table class="compare-table"><thead><tr><th>項目</th><th>今回</th><th>比較平均</th></tr></thead><tbody>${QUALITY.map(([key,label])=>`<tr><td>${esc(label)}</td><td>${fmt(num(personal?.[key]))}</td><td>${fmt(hist.scores[key])}</td></tr>`).join('')}</tbody></table>`;}
   function profileMarkup(profile){return PROFILE.map(([key,label])=>{const score=num(profile?.[key]);return `<div class="profile-row"><span>${esc(label)}</span><span class="profile-track"><i style="width:${score?score*10:0}%"></i></span><span>${score||'—'}</span></div>`;}).join('');}
   function photoStrip(list){return list?.length?`<div class="photo-strip">${list.map(p=>`<img src="${esc(p)}" alt="記録した写真">`).join('')}</div>`:'';}
   function detailItem(label,value,link=false){return `<div class="meta-item"><span>${esc(label)}</span><div>${link && value?`<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">公式・商品ページを開く</a>`:esc(value||'—')}</div></div>`;}
-  function generalBlock(r){const ge=r.generalEvaluation;if(!ge)return `<p class="source-note">公開情報からの参考評価は未登録です。必要な場合は「評価依頼をコピー」から取得できます。</p>`;
-    const sources=Array.isArray(ge.sources)?ge.sources:[];
-    return `<p class="source-note">以下はChatGPTが公開情報を調べて算出した参考値です。実測・世論調査の平均とは異なります。<br>確度：${esc(ge.confidence||'不明')} ${ge.assessedAt?`／調査日：${esc(ge.assessedAt)}`:''}</p>
-      ${ge.summary?`<p class="comment-block">${esc(ge.summary)}</p>`:''}${ge.evidenceSummary?`<p class="source-note">根拠：${esc(ge.evidenceSummary)}</p>`:''}
-      ${sources.length?`<div class="source-links">${sources.map(s=>{const link=http(s.url);return link?`<div><a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(s.label||link)}</a>${s.publishedAt?`（${esc(s.publishedAt)}）`:''}</div>`:'';}).join('')}</div>`:''}`;
+  // 旧版の曖昧なまとめは、推測で一次情報と口コミに割り振らず別途保持する。
+  // 「【公式一次情報】...【公開レビュー】...」などの見出しが明示されている場合だけ抽出する。
+  function extractLegacySections(evidence){
+    const src=cleanText(evidence||'',7000),heads=/【([^】]+)】/g;let match,prev=null,lastEnd=0;
+    const official=[],review=[];let matched=false;
+    while((match=heads.exec(src))!==null){
+      if(prev){const body=src.slice(lastEnd,match.index).trim();
+        if(/公式|一次情報/.test(prev))official.push(body);
+        else if(/レビュー|口コミ|母数|解釈|限界/.test(prev))review.push(`${prev}：${body}`);
+      }
+      prev=match[1];lastEnd=heads.lastIndex;matched=true;
+    }
+    if(prev){const body=src.slice(lastEnd).trim();
+      if(/公式|一次情報/.test(prev))official.push(body);
+      else if(/レビュー|口コミ|母数|解釈|限界/.test(prev))review.push(`${prev}：${body}`);
+    }
+    return {official:official.filter(Boolean).join('\n'),review:review.filter(Boolean).join('\n'),matched};
+  }
+  function officialReviewParts(ge){
+    const old=extractLegacySections(ge?.evidenceSummary);
+    const officialInfo=cleanText(ge?.officialInfo??ge?.officialFacts??ge?.official??old.official??'',6000).trim();
+    const reviewTrends=cleanText(ge?.reviewTrends??ge?.reviewSummary??ge?.reviews??old.review??'',6000).trim();
+    const oldOverview=cleanText(ge?.summary||'',2000).trim();
+    const unclassified=old.matched?'':cleanText(ge?.evidenceSummary||'',7000).trim();
+    return {officialInfo,reviewTrends,oldOverview,unclassified};
+  }
+  function generalBlock(r){
+    const ge=r.generalEvaluation;
+    if(!ge)return `<p class="source-note">公式情報・レビュー傾向は未登録です。「調査依頼をコピー」から取得して追加できます。</p>`;
+    const {officialInfo,reviewTrends,oldOverview,unclassified}=officialReviewParts(ge);
+    const sources=(Array.isArray(ge.sources)?ge.sources:ge.sources&&typeof ge.sources==='object'?[ge.sources]:[]);
+    return `<p class="source-note">掲載内容は引用元をもとに作成した調査メモです。公式の説明と購入者・実食者の感想は区別して表示します。<br>${ge.assessedAt?`調査日：${esc(ge.assessedAt)}　`:''}情報の確度：${esc(ge.confidence||'不明')}</p>
+      <div class="research-panel"><h4>公式情報</h4><p>${esc(officialInfo||'確認できた公式情報の記述はありません。')}</p></div>
+      <div class="research-panel"><h4>レビュー傾向</h4><p>${esc(reviewTrends||'独立した実食レビューに基づく傾向は確認できていません。')}</p></div>
+      ${(oldOverview||unclassified)?`<details class="legacy-research"><summary>旧形式の調査メモ（分類不能な文章を保管）</summary>${oldOverview?`<p>${esc(oldOverview)}</p>`:''}${unclassified?`<p>${esc(unclassified)}</p>`:''}</details>`:''}
+      ${sources.length?`<div class="source-links"><h4>確認した情報源</h4>${sources.map(src=>{const link=http(src?.url);return link?`<div><a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(src.label||link)}</a>${src.publishedAt?`（${esc(src.publishedAt)}）`:''}</div>`:'';}).join('')}</div>`:''}`;
   }
   function compareOptions(record){const t=record.taxonomy||taxonomyFromRecord(record);
     const choices=[{value:'all',label:'全商品平均'},{value:'method:'+t.method,label:categoryLabel('method:'+t.method)}];
@@ -363,10 +393,10 @@
     return choices;
   }
   function comparisonMarkup(record,scope){
-    const s=latest(record),hist=historical(scope),general=record.generalEvaluation?.scores||null;
-    return `${radarSvg(s?.quality||{},hist,general)}<div class="legend"><span><i></i>この商品の直近</span><span><i class="avg"></i>${esc(scope==='all'?'全商品平均':'同分類平均')}</span>${general?'<span><i class="general"></i>公開情報の参考評価</span>':''}</div>
+    const s=latest(record),hist=historical(scope);
+    return `${radarSvg(s?.quality||{},hist)}<div class="legend"><span><i></i>この商品の直近</span><span><i class="avg"></i>${esc(scope==='all'?'全商品平均':'同分類平均')}</span></div>
       <p class="chart-caption">${esc(categoryLabel(scope))}：${hist.products}商品・実食${hist.tastings}回。各商品内で平均した後、商品間で等重み平均します。現在の商品を含みます。${hist.products<3?'商品数が少ないため平均値は参考程度です。':''}</p>
-      ${renderScoreTable(s?.quality||{},hist,general)}${general&&!complete(general)?'<p class="source-note">参考評価に未採点項目があるため、参考評価の多角形は描画していません。</p>':''}`;
+      ${renderScoreTable(s?.quality||{},hist)}`;
   }
   function openDetail(rid){
     const r=get(rid);if(!r)return;state.activeId=r.id;const isTasted=r.sessions.length>0,s=latest(r);
@@ -381,14 +411,15 @@
       ${isTasted?`
       <section class="detail-section plot-block"><div class="evaluation-heading"><h3>個人的な評価</h3><button type="button" class="secondary-btn small-btn" data-action="edit-latest">評価を編集する</button></div><p class="helper">直近の採点を、全商品平均またはこの商品の分類別平均と比較します。</p>
         <label class="field compact-field"><span>レーダーチャートの比較対象</span><select id="compareScope">${options.map(o=>`<option value="${esc(o.value)}" ${scope===o.value?'selected':''}>${esc(o.label)}</option>`).join('')}</select></label>
-        <div id="comparisonPanel">${comparisonMarkup(r,scope)}</div>${generalBlock(r)}</section>
+        <div id="comparisonPanel">${comparisonMarkup(r,scope)}</div></section>
       <section class="detail-section"><h3>食べた記録 <small>（${r.sessions.length}回）</small></h3>
         ${allSessions.map((sess,i)=>`<article class="session-card"><h4>${fmtDate(sess.tastedDate)}　${i===0?'<span class="pill">最新</span>':''}</h4><div class="session-score">総合評価 ${fmt(num(sess.quality?.overall))} / 10</div><p>量：${esc(sess.amount||'未記録')} ／ 合わせたもの：${esc(sess.pairing||'なし')}</p><p>${esc(sess.servingTemp)} ／ ${esc(sess.sliceThickness)}</p>${sess.comment?`<div class="comment-block">${esc(sess.comment)}</div>`:''}${sess.visualNote?`<p>見た目：${esc(sess.visualNote)}</p>`:''}${photoStrip(sess.photos)}<div class="action-row"><button class="secondary-btn small-btn" data-session="${esc(sess.id)}">この回を編集</button></div></article>`).join('')}</section>
       <section class="detail-section"><h3>直近の味わい</h3><p class="helper">良し悪しでなく特徴の強さを記録</p>${profileMarkup(s.profile)}</section>
       `:`<section class="detail-section"><p class="lead">${r.status==='stock'?'購入済み。食べたら評価を追加して手帖へ移せます。':'気になっている羊羹。購入したらストックに移せます。'}</p></section>`}
-      <section class="detail-section"><h3>公開情報からの参考評価</h3><p class="helper">評価依頼の文章をコピーしてChatGPTで調査し、返ってきたJSONをこの商品に取り込めます。</p>
-        <button class="secondary-btn" data-action="copy" type="button">評価依頼をコピー</button>
-        <details class="import-box"><summary>JSONを貼って取り込む</summary><p class="source-note">この商品の店名・商品名が一致するかも確認します。</p><label class="field">ChatGPTの回答<textarea id="generalJSON" rows="9" placeholder='{"schemaVersion":1,"productName":"..."}'></textarea></label><div class="action-row"><button class="primary-btn" data-action="import-general" type="button">この商品に取り込む</button>${r.generalEvaluation?'<button class="danger-btn" data-action="delete-general">参考評価を削除</button>':''}</div><p id="jsonImportStatus" class="import-feedback" role="status" aria-live="polite"></p></details></section>`;
+      <section class="detail-section"><h3>公式情報とレビュー傾向</h3><p class="helper">ChatGPTで公式情報とレビュー傾向を調査し、文章と出典だけを追加します。10段階の採点はしません。</p>
+        ${generalBlock(r)}
+        <button class="secondary-btn" data-action="copy" type="button">調査依頼をコピー</button>
+        <details class="import-box"><summary>調査結果のJSONを貼って取り込む</summary><p class="source-note">この商品の店名・商品名が一致するかも確認します。</p><label class="field">ChatGPTの回答<textarea id="generalJSON" rows="9" placeholder='{"schemaVersion":2,"productName":"..."}'></textarea></label><div class="action-row"><button class="primary-btn" data-action="import-general" type="button">この商品に取り込む</button>${r.generalEvaluation?'<button class="danger-btn" data-action="delete-general">調査メモを削除</button>':''}</div><p id="jsonImportStatus" class="import-feedback" role="status" aria-live="polite"></p></details></section>`;
     show(detailDialog);
     $('compareScope')?.addEventListener('change',e=>{
       state.compareScopes[r.id]=e.target.value;
@@ -399,17 +430,23 @@
   function normalizeGeneral(raw,r){
     if(!raw||typeof raw!=='object'||Array.isArray(raw))throw Error('JSONの形式が違います');
     const ge=raw.generalEvaluation||raw;
-    const scores=ge.scores;
-    if(!scores||typeof scores!=='object')throw Error('scores がありません');
-    if(raw.productName&&cleanName(raw.productName)!==cleanName(r.productName))throw Error('商品名が登録と一致しません');
+    if(!ge||typeof ge!=='object'||Array.isArray(ge))throw Error('generalEvaluation が正しくありません');
+    if(raw.productName&&cleanName(raw.productName)!==cleanName(r.productName))throw Error('商品名が登録と一致しません（本練と本煉など表記を確認してください）');
     if(raw.shopName&&cleanName(raw.shopName)!==cleanName(r.shopName))throw Error('店名が登録と一致しません');
-    const cleanScores=Object.fromEntries(QUALITY.map(([key])=>[key,num(scores[key])]));
-    if(!Object.values(cleanScores).some(v=>v!==null) && !ge.summary && !ge.evidenceSummary && !(Array.isArray(ge.sources)&&ge.sources.length))throw Error('採点も根拠も含まれていません。確認した回答を貼り付けてください。');
-    return {schemaVersion:1,scores:cleanScores,summary:cleanText(ge.summary,500),evidenceSummary:cleanText(ge.evidenceSummary,1800),
+    const notes=officialReviewParts(ge);
+    const sources=(Array.isArray(ge.sources)?ge.sources:ge.sources&&typeof ge.sources==='object'?[ge.sources]:[])
+      .slice(0,15).map(src=>({label:cleanText(src?.label||'出典',200),url:http(src?.url||''),publishedAt:cleanText(src?.publishedAt||'',80)})).filter(src=>src.url);
+    if(!notes.officialInfo&&!notes.reviewTrends&&!notes.oldOverview&&!notes.unclassified&&!sources.length){
+      throw Error('公式情報・レビュー傾向・出典がありません。調査結果を貼り付けてください。');
+    }
+    return {schemaVersion:2,officialInfo:notes.officialInfo,reviewTrends:notes.reviewTrends,
+      // 古い数値付きの調査結果を取り込んでも、その値は参考表示に利用しない。
+      summary:notes.oldOverview,evidenceSummary:cleanText(ge.evidenceSummary||'',7000),
+      legacyScores:ge.scores && typeof ge.scores==='object' && !Array.isArray(ge.scores)?structuredClone(ge.scores):null,
       confidence:['low','medium','high'].includes(ge.confidence)?ge.confidence:'unverified',
-      assessedAt:cleanText(ge.assessedAt||raw.assessedAt||'',40),sources:(Array.isArray(ge.sources)?ge.sources:[]).slice(0,8).map(s=>({label:cleanText(s?.label||'出典',120),url:http(s?.url||''),publishedAt:cleanText(s?.publishedAt||'',40)})).filter(s=>s.url),importedAt:new Date().toISOString()};
+      assessedAt:cleanText(ge.assessedAt||raw.assessedAt||'',40),sources,importedAt:new Date().toISOString()};
   }
-  function cleanName(value){return String(value||'').normalize('NFKC').replace(/[\s　]/g,'').toLocaleLowerCase('ja');}
+  function cleanName(value){return String(value||'').normalize('NFKC').replace(/本練/g,'本煉').replace(/[\s　]/g,'').toLocaleLowerCase('ja');}
   function normalizeSmartQuotes(jsonText){
     // AI回答が “key”: “value” のような組版引用符を使用した場合だけ補正。
     // 正しい半角引用符で囲まれた文字列内の “ ” は本文として保持する。
@@ -454,19 +491,82 @@
     }
     return [...new Set(candidates.filter(Boolean))];
   }
+  function sourceObjectEnd(text,start){
+    let depth=0,inside=false,escaped=false;
+    for(let i=start;i<text.length;i++){
+      const ch=text[i];
+      if(inside){if(escaped)escaped=false;else if(ch==='\\')escaped=true;else if(ch==='"')inside=false;continue;}
+      if(ch==='"'){inside=true;continue;}
+      if(ch==='{')depth++;
+      if(ch==='}'&&--depth===0)return i+1;
+      if(ch!=='}')continue;
+    }
+    return -1;
+  }
+  function repairSourceObjects(input){
+    // AI生成の「sources": {…}, {…}」を「sources": [{…}, {…}]」へ。
+    // 入れ子内の文字列や引用符は変更せず、出典オブジェクト以外には適用しない。
+    let text=input,offset=0,re=/"sources"\s*:\s*\{/g,found;
+    while((found=re.exec(text))!==null){
+      const start=found.index+found[0].lastIndexOf('{');
+      let end=sourceObjectEnd(text,start);if(end<0)continue;
+      while(true){
+        const rest=text.slice(end),sep=/^\s*,\s*\{/.exec(rest);
+        if(!sep)break;
+        const nextStart=end+sep[0].lastIndexOf('{');
+        const nextEnd=sourceObjectEnd(text,nextStart);
+        if(nextEnd<0)break;
+        end=nextEnd;
+      }
+      text=text.slice(0,start)+'['+text.slice(start,end)+']'+text.slice(end);
+      re.lastIndex=end+2;
+      offset++;
+    }
+    return text;
+  }
   function parseGeneralText(raw){
     const text=String(raw||'').replace(/^\uFEFF/,'').trim();
     if(!text)throw Error('ChatGPTの回答が空です。JSONを貼り付けてください。');
     let lastError;
     for(const source of objectCandidates(text)){
-      for(const candidate of [source,normalizeSmartQuotes(source),removeTrailingCommas(normalizeSmartQuotes(source))]){
+      const readable=normalizeSmartQuotes(source);
+      for(const candidate of [source,readable,removeTrailingCommas(readable),repairSourceObjects(removeTrailingCommas(readable))]){
         try{const parsed=JSON.parse(candidate);if(parsed && !Array.isArray(parsed) && typeof parsed==='object')return parsed;}
         catch(err){lastError=err;}
       }
     }
-    throw Error('JSON形式を読み取れませんでした。回答全体を貼り付けてください。特殊な引用符とコードブロックは自動補正します。'+(lastError?'':'（JSONオブジェクトが見つかりません）'));
+    throw Error('JSON形式を読み取れませんでした。回答全体を貼り付けてください。特殊な引用符とコードブロック・sourcesの配列抜けは自動補正します。'+(lastError?'':'（JSONオブジェクトが見つかりません）'));
   }
-  function promptFor(r){return `次の商品を、実在する公式の商品情報と公開レビューに基づいて慎重に調査してください。可能ならWeb検索を実行し、情報の日付・出典を確認してください。\n商品名：${r?.productName||'（商品名を入力）'}\n和菓子屋：${r?.shopName||'（店名を入力）'}\n\n目的：個人の好みの評価と比較するため、「公開情報から推定した参考評価」を項目ごとに記録する。公開情報からの推定値は実測の消費者平均値ではありません。\n\n絶対条件：\n- 公式商品ページの事実と、実際に確認できた口コミの傾向と、AI自身の解釈を分けること。\n- 同一商品の特定が不十分・レビューが少ない・ある項目の根拠がない場合は、数字を捏造せず null とする。根拠が薄いから5点に置くことも禁止。\n- レビューの母数がわかればevidenceSummaryに明記する。数値は1〜10の整数かnullのみ。\n- 総合評価は他の項目の機械的平均ではなく、総合的なレビュー傾向を確認できる場合のみ推定する。\n- 公式仕様を根拠に食感や再購入意向を断定しない。\n- 確認したURLと公開年月日を記載。直接確認できない出典は入れない。\n- 必ずJSONオブジェクトのみ返却（コードフェンス・前置きは不要）。\n\nスキーマ：\n{\n "schemaVersion":1,\n "productName":"${r?.productName||'商品名'}",\n "shopName":"${r?.shopName||'店名'}",\n "generalEvaluation":{\n   "scores":{"ingredientFlavor":null,"sweetBalance":null,"texture":null,"aftertaste":null,"repeat":null,"overall":null},\n   "summary":"特徴と口コミ傾向（100字程度）",\n   "evidenceSummary":"何が一次情報か、レビュー母数・確認できた記述・推定の限界",\n   "confidence":"low",\n   "assessedAt":"調査年月日 YYYY-MM-DD",\n   "sources":[{"label":"確認できた一次情報","url":"https://example.com","publishedAt":"YYYY-MM-DD または日付不明"}]\n }\n}\n\n使用可能な scores のキーは上記6個。確度は low / medium / high のいずれか。根拠不十分の場合は null を残す。調査の結果すべてnullでも、確認した事実・出典があればそのままJSONで返す。出典が一切ない場合は調査不能と報告する。`;}
+  function promptFor(r){return `次の羊羹について、公式メーカー情報と実食レビューを調査してください。Web検索が可能なら、公式ページを優先し、出典の掲載日を確認してください。
+商品名：${r?.productName||'（商品名を入力）'}
+和菓子屋：${r?.shopName||'（店名を入力）'}
+
+【目的】ようかん手帖に「公式情報」と「レビュー傾向」を別々に記録すること。
+【厳守】
+- 数値評価・推定スコア・ランキングは不要。架空の点数を絶対に作らない。
+- officialInfo：メーカー公式に明記された原材料、製法、種類、特徴、保存期間など。一次情報がない場合は「確認できず」と明記。商品サイズや派生商品の情報を混同しない。
+- reviewTrends：実食者が実際に書いた味・香り・食感の傾向。確認したレビュー件数、少数の場合の限界、異なる意見を簡潔に記載。十分なレビューがない場合は「傾向を判断できない」と明記。
+- 公式の特徴を口コミの事実に転用しない。AIの推測はレビュー事実として断定しない。
+- 実際に確認したURLのみ sources に記載する。公開日が不明なら「日付不明」。見つからない情報は書かない。
+- JSONオブジェクトだけを返す。普通の半角ダブルクォーテーションを使用。sourcesは必ず [ ] で囲んだ配列にする。
+- 情報が足りない場合も架空の内容を補わず「確認できず」と返す。
+
+次のJSONスキーマとキー名を完全に守る：
+{
+  "schemaVersion": 2,
+  "productName": ${JSON.stringify(r?.productName||'商品名')},
+  "shopName": ${JSON.stringify(r?.shopName||'店名')},
+  "generalEvaluation": {
+    "officialInfo": "公式サイトで確認できた事実のみを簡潔にまとめた文章",
+    "reviewTrends": "実食レビューの傾向・件数・不足している根拠をまとめた文章",
+    "confidence": "low",
+    "assessedAt": "調査日 YYYY-MM-DD",
+    "sources": [
+      {"label": "参照したページ", "url": "https://example.com", "publishedAt": "日付不明"}
+    ]
+  }
+}
+confidenceはhigh/medium/lowから選択。sources は必ず配列。実在する出典がなければ空配列 []。`;} 
   function copyStatus(button,message,ok,copyContent=''){
     if(!button)return;
     if(!button.dataset.originalLabel)button.dataset.originalLabel=button.textContent;
@@ -494,7 +594,7 @@
         document.body.appendChild(ta);
         try{ta.focus();ta.select();if(!document.execCommand('copy'))throw Error('copy unsupported');}finally{ta.remove();}
       }
-      copyStatus(button,'評価依頼の文章をコピーしました。ChatGPTへ貼り付けてください。',true);
+      copyStatus(button,'調査依頼の文章をコピーしました。ChatGPTへ貼り付けてください。',true);
       toast('✓ コピーしました');
     }catch(e){
       console.error(e);
@@ -508,8 +608,8 @@
     try{
       const payload=parseGeneralText(raw),ge=normalizeGeneral(payload,r);
       await putMany([{...r,generalEvaluation:ge,updatedAt:new Date().toISOString()}]);
-      await reload();openDetail(r.id);toast('参考評価を取り込みました');
-      const feedback=$('jsonImportStatus');if(feedback)feedback.textContent='✓ 参考評価を取り込みました';
+      await reload();openDetail(r.id);toast('公式情報とレビュー傾向を取り込みました');
+      const feedback=$('jsonImportStatus');if(feedback)feedback.textContent='✓ 公式情報とレビュー傾向を取り込みました';
     }catch(e){
       console.error(e);
       const feedback=$('jsonImportStatus');
@@ -558,7 +658,7 @@
       case 'toggle-preference':putMany([{...r,includeInPreference:r.includeInPreference===false,updatedAt:new Date().toISOString()}]).then(reload).then(()=>openDetail(rid)).then(()=>toast('好み分析の対象を更新しました')).catch(e=>{console.error(e);toast('更新できませんでした');});break;
       case 'copy':copyPrompt(r,btn);break;
       case 'import-general':importGeneral();break;
-      case 'delete-general':if(confirm('参考評価を削除しますか？'))putMany([{...r,generalEvaluation:null}]).then(reload).then(()=>openDetail(rid));break;
+      case 'delete-general':if(confirm('公式情報とレビュー傾向を削除しますか？'))putMany([{...r,generalEvaluation:null}]).then(reload).then(()=>openDetail(rid));break;
     }
   }
   // フォームは通常の文書フローでスクロールし、VisualViewportによる

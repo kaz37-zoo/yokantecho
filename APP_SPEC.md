@@ -74,3 +74,11 @@
 ### 互換性
 - IndexedDB名・ストア・構造・バックアップの `schemaVersion:4` は維持。旧v1〜v5.1の記録を引き継げる設計。
 - 過去の評価、写真、ランキング、分類、集計ロジックは変更しない。
+
+
+## v5.3 追補：外部参考評価を定性情報に変更（2026-10-25）
+- 外部情報の推定10段階評価は生成しない。数値レーダーチャートは個人採点とユーザーの記録平均のみ。
+- `generalEvaluation` の最新版は `{schemaVersion:2, officialInfo:string, reviewTrends:string, confidence:string, assessedAt:string, sources:array}`。`sources` の各要素は `{label,url,publishedAt}`。
+- 旧形式には `summary`, `evidenceSummary`, `scores` がある。旧バックアップは読み込めるようにし、見出し付き文章は安全に振り分け、混在する旧メモは別途保持する。古い数値は評価チャートに出さない。
+- 生の回答に混入した装飾引用符と `sources` の配列括弧抜けは限定的に補正。商品・店名照合は維持し、`本練` と `本煉` の表記揺れは照合時のみ許容する。
+- アプリのフルバックアップの形式 `schemaVersion:4`、DB名 `yokan-techo-db`、DBバージョン1は変更しない。

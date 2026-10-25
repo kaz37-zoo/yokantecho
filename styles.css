@@ -94,3 +94,11 @@ body.editor-page-open .sheet-inner{animation:calm-appear 240ms ease-out both}
 
 #comparisonPanel.swap-fade{animation:calm-appear 240ms ease-out both}
 @media(prefers-reduced-motion:reduce){#comparisonPanel.swap-fade{animation:none}}
+
+/* v5.3: 公式情報とレビュー傾向を、数値比較グラフと分離して表示 */
+.research-panel{padding:14px 16px;margin:12px 0;border:1px solid var(--line,#dfd9cd);border-radius:12px;background:rgba(255,253,249,.64)}
+.research-panel h4,.source-links h4{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--brown-deep,#5b4d43)}
+.research-panel p{margin:0;white-space:pre-wrap;line-height:1.85;overflow-wrap:anywhere;font-size:14px}
+.legacy-research{margin:12px 0;color:var(--ink-soft,#73685d);font-size:13px}
+.legacy-research summary{cursor:pointer;line-height:1.6}
+.legacy-research p{line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}

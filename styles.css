@@ -34,3 +34,63 @@ select, textarea { font-size: 16px; }
 .field textarea, .field select,
 .toolbar input, .toolbar select,
 .import-box textarea { font-size: 16px; }
+
+
+/* v5.1: iPhone Safari / 日本語キーボードで編集シートが半分で固定される問題の対策。
+   編集フォームのみモーダル（トップレイヤー）から通常ページに変更。
+   これによりVisualViewportに追随する要素の高さ変更や二重スクロールをなくす。 */
+body.editor-page-open .app-shell { display: none; }
+body.editor-page-open { overflow: visible; }
+body.editor-page-open #productDialog,
+body.editor-page-open #tasteDialog {
+  position: relative;
+  display: block;
+  inset: auto;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: min(100%, 720px);
+  height: auto;
+  min-height: 100svh;
+  max-height: none;
+  margin: 0 auto;
+  padding: 0;
+  overflow: visible;
+  -webkit-overflow-scrolling: auto;
+  overscroll-behavior: auto;
+}
+body.editor-page-open #productDialog:not([open]),
+body.editor-page-open #tasteDialog:not([open]) { display: none; }
+body.editor-page-open .sheet-head {
+  position: relative;
+  top: auto;
+  backdrop-filter: none;
+}
+body.editor-page-open .sheet-inner {
+  min-height: 100svh;
+  padding-bottom: calc(150px + env(safe-area-inset-bottom));
+}
+/* 文字の拡大を起こしにくくする。通常のピンチズームは引き続き有効。 */
+body.editor-page-open input:not([type="range"]):not([type="checkbox"]):not([type="file"]):not([type="hidden"]),
+body.editor-page-open textarea,
+body.editor-page-open select { font-size: 16px; }
+
+
+/* v5.2: 落ち着いた画面遷移と、コピー／JSONの状態を見やすくする */
+.main-view.view-exit{opacity:.32;transition:opacity 130ms ease-in;pointer-events:none}
+.main-view.view-enter{animation:calm-appear 280ms cubic-bezier(.2,.7,.2,1) both}
+@keyframes calm-appear{from{opacity:.25}to{opacity:1}}
+#detailDialog[open] #detailContent{animation:calm-appear 260ms ease-out both}
+body.editor-page-open .sheet-inner{animation:calm-appear 240ms ease-out both}
+.copy-success{border-color:#819581!important;background:#edf2e7!important;color:#3d5941!important}
+.copy-feedback{margin:9px 0 12px;padding:9px 12px;border-left:3px solid #8d9d87;color:var(--deep);background:#f0f2e9;font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.import-feedback{margin:12px 0 0;color:var(--danger);font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.manual-copy{display:block;width:100%;min-height:108px;margin-top:9px;font-size:16px;color:var(--ink);background:var(--white);border:1px solid var(--line);padding:9px;resize:vertical}
+@media(prefers-reduced-motion:reduce){
+ .main-view.view-exit{opacity:1;transition:none}
+ .main-view.view-enter,#detailDialog[open] #detailContent,body.editor-page-open .sheet-inner{animation:none}
+}
+
+#comparisonPanel.swap-fade{animation:calm-appear 240ms ease-out both}
+@media(prefers-reduced-motion:reduce){#comparisonPanel.swap-fade{animation:none}}

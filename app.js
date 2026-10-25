@@ -139,8 +139,34 @@
   async function reload(){state.records=(await getAll()).map(r=>{try{return normalizeRecord(r);}catch(e){console.warn('Record skipped',e);return null;}}).filter(Boolean);}
   const get = rid => state.records.find(r=>r.id===rid);
   function toast(message){document.querySelector('.toast')?.remove();const node=document.createElement('div');node.className='toast';node.textContent=message;document.body.append(node);setTimeout(()=>node.remove(),2800);}
-  const show = modal => {if(!modal.open)modal.showModal();};
-  const close = modal => {if(modal.open)modal.close();};
+  // 入力フォームはiOS Safariのキーボード/VisualViewport競合を避けるため、
+  // 全画面モーダルではなく通常のスクロール可能なページとして開く。
+  const isEditor = modal => modal===productDialog || modal===tasteDialog;
+  let editorDirty = false;
+  function markEditorDirty(event){
+    if((productDialog.open && productDialog.contains(event.target)) || (tasteDialog.open && tasteDialog.contains(event.target))) editorDirty=true;
+  }
+  const show = modal => {
+    if(modal.open)return;
+    if(isEditor(modal)){
+      document.body.classList.add('editor-page-open');
+      modal.show(); // 非モーダル: 本文として表示し、スクロールは文書に任せる
+      window.scrollTo(0,0);
+    } else modal.showModal();
+  };
+  const close = (modal, force=false) => {
+    if(!modal.open)return false;
+    if(isEditor(modal) && editorDirty && !force){
+      if(!confirm('入力途中の内容が保存されていません。保存せずに閉じますか？'))return false;
+    }
+    if(isEditor(modal))editorDirty=false;
+    modal.close();
+    if(isEditor(modal) && !productDialog.open && !tasteDialog.open){
+      document.body.classList.remove('editor-page-open');
+      window.scrollTo(0,0);
+    }
+    return true;
+  };
   function gallery(src){return src ? `<img class="product-photo" src="${esc(src)}" alt="商品写真">` : '<div class="product-photo placeholder">ようかん</div>';}
   function empty(message){return `<div class="empty-state"><img src="./icon-180.png" alt=""><h2>${esc(message)}</h2><p>右上の「＋ 記録」から登録できます。</p></div>`;}
   function card(r,insideFuture=false){const s=latest(r);return `<button type="button" class="product-card" data-open="${esc(r.id)}">${gallery(productPhoto(r))}<div class="product-body"><h2 class="product-name">${esc(r.productName)}</h2><p class="product-shop">${esc(r.shopName)}</p><p class="product-meta">${esc(r.taxonomy.method)}${s?` · ${fmtDate(s.tastedDate)} · ${r.sessions.length}回` : insideFuture?` · ${r.status==='stock'?'購入済み':'未購入'}`:''}</p></div></button>`;}
@@ -214,12 +240,30 @@
     <section class="guide-card"><h3>分類のしくみ</h3><p>「製法」は練・蒸・水などから1つ選択。「素材・風味」と「食感・仕上げ」は複数選択できます。「本煉」「小倉」「小城羊羹」は補助の「仕立て・呼び名」に登録できます。</p><p>例：小城羊羹は「練羊羹 ＋ シャリシャリ ＋ 小城羊羹」。製法が同じものとも、シャリシャリ系だけでも比べられます。以前の記録は可能な範囲で自動分類し、いつでも編集可能です。</p></section>
     <section class="guide-card"><h3>平均とランキング</h3><p>レーダーチャートの比較対象を「全商品平均」「同じ製法」「同じ素材」「同じ食感」などから切り替えられます。「好み」タブでは総合ランキングと種類別ランキングの切り替えもできます。</p><p>平均は商品ごとに実食回数の平均を計算してから、商品単位で等重み平均します。好みのプロファイル分析は、指定した高評価商品だけが対象です。変わり種を好み分析から除外しても、全商品平均とランキングには残ります。</p></section>
     <section class="guide-card"><h3>評価の使い分け</h3><p>甘さ・濃厚さ・かたさなどのプロファイルは強さを記録するもの。素材の風味・甘味のバランス・食感・後味・また食べたい・総合評価は好みの10段階評価です。</p><p>公開情報からの参考評価（AIによる推定）は別の系列として表示します。</p></section>
-    <section class="guide-card"><h3>一般的な評価を取り込む</h3><p>記録の詳細で「評価依頼をコピー」→ ChatGPTへ貼り付け → 返ってきたJSONを詳細に貼り付けて取り込みます。根拠の確認できない項目は空欄のままとし、推測で埋めません。</p><button class="secondary-btn" id="blankPrompt">空欄テンプレートをコピー</button></section>
+    <section class="guide-card"><h3>一般的な評価を取り込む</h3><p>記録の詳細で「評価依頼をコピー」→ ChatGPTへ貼り付け → 返ってきた回答をそのまま貼り付けて取り込みます。コードブロックや組版引用符は自動で読み替えます。根拠の確認できない項目は空欄のままとし、推測で埋めません。</p><button class="secondary-btn" id="blankPrompt">空欄テンプレートをコピー</button></section>
     <section class="guide-card"><h3>バックアップ・移行</h3><p>写真を含むJSONを保存できます。旧バージョンのバックアップ（v1/v2/v3）の records をそのまま取り込めます。重複IDは既存の実食履歴を保持して統合します。機種変更前には必ず書き出してください。</p><div class="action-row"><button id="export" class="secondary-btn">JSONバックアップを書き出す</button><label class="photo-picker">JSONを取り込む<input type="file" id="import" accept=".json,application/json"></label></div><p class="helper">ブラウザ内のデータはサイトデータ消去などで失われます。自動クラウド同期ではありません。</p></section>`;
-    $('blankPrompt').addEventListener('click',()=>copyPrompt(null));$('export').addEventListener('click',exportBackup);$('import').addEventListener('change',e=>{if(e.target.files?.[0])importBackup(e.target.files[0]);});
+    $('blankPrompt').addEventListener('click',e=>copyPrompt(null,e.currentTarget));$('export').addEventListener('click',exportBackup);$('import').addEventListener('change',e=>{if(e.target.files?.[0])importBackup(e.target.files[0]);});
   }
   function render(){document.querySelectorAll('.tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===state.tab));if(state.tab==='future')renderFuture();else if(state.tab==='analysis')renderAnalysis();else if(state.tab==='guide')renderGuide();else renderTecho();}
-  function nav(tab){state.tab=tab;render();window.scrollTo(0,0);}
+  const motionOK = () => !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let navTimer = null;
+  function nav(tab){
+    if(!['techo','future','analysis','guide'].includes(tab))return;
+    clearTimeout(navTimer);
+    if(tab===state.tab && !main.classList.contains('view-exit')){render();window.scrollTo(0,0);return;}
+    state.tab=tab;
+    if(!motionOK()){
+      main.classList.remove('view-exit','view-enter');render();window.scrollTo(0,0);return;
+    }
+    main.classList.remove('view-enter');main.classList.add('view-exit');
+    navTimer=setTimeout(()=>{
+      navTimer=null;render();window.scrollTo(0,0);
+      main.classList.remove('view-exit');
+      // DOMを入れ替えた後の短いフェード。画面外へのスライドはしない。
+      void main.offsetWidth;
+      main.classList.add('view-enter');
+    },130);
+  }
 
   function preview(where,photos){$(where).innerHTML=photos.map((p,i)=>`<div class="photo-chip"><img src="${esc(p)}" alt="写真 ${i+1}"><button type="button" data-remove-photo="${i}" aria-label="写真を削除">×</button></div>`).join('');}
   async function compress(file){
@@ -228,7 +272,7 @@
     const image=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=uri;});
     const ratio=Math.min(1,1280/Math.max(image.width,image.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*ratio));canvas.height=Math.max(1,Math.round(image.height*ratio));const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.80);
   }
-  async function photosInput(files,group){const dest=group==='product'?state.photos:state.tastePhotos;const remaining=3-dest.length;if(remaining<=0){toast('写真は最大3枚です');return;}for(const f of [...files].slice(0,remaining)){try{dest.push(await compress(f));}catch(e){console.warn(e);toast('写真を読み込めませんでした');}}preview(group==='product'?'productPhotoPreview':'tastePhotoPreview',dest);}
+  async function photosInput(files,group){const dest=group==='product'?state.photos:state.tastePhotos;const remaining=3-dest.length;if(remaining<=0){toast('写真は最大3枚です');return;}for(const f of [...files].slice(0,remaining)){try{dest.push(await compress(f));}catch(e){console.warn(e);toast('写真を読み込めませんでした');}}preview(group==='product'?'productPhotoPreview':'tastePhotoPreview',dest);editorDirty=true;}
   function productEditor(record=null,desired='tasted'){
     close(detailDialog);$('productForm').reset();$('productId').value=record?.id||'';
     $('productHeading').textContent=record?'商品情報を編集':'新しい羊羹を登録';
@@ -241,7 +285,7 @@
     $('productStatus').title=record?.sessions.length?'実食履歴がある商品は手帖に残します':'';
     $('deleteProduct').classList.toggle('hidden',!record);
     state.photos=[...(record?.photos||[])];preview('productPhotoPreview',state.photos);
-    show(productDialog);
+    editorDirty=false;show(productDialog);
   }
   async function saveProduct(e){
     e.preventDefault();if(!$('productForm').reportValidity())return;
@@ -255,7 +299,7 @@
       memo:$('productMemo').value.trim(),photos:state.photos,sessions:current?.sessions||[],status:needsTaste?'stock':chosen,
       createdAt:current?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()
     });
-    try{await putMany([rec]);await reload();close(productDialog);if(needsTaste)tasteEditor(get(rec.id));else{nav(rec.status==='tasted'?'techo':'future');if(rec.status==='stock')state.future='stock';else if(rec.status==='wishlist')state.future='wishlist';render();toast('保存しました');}}catch(err){console.error(err);toast('保存できませんでした');}
+    try{await putMany([rec]);await reload();close(productDialog,true);if(needsTaste)tasteEditor(get(rec.id));else{nav(rec.status==='tasted'?'techo':'future');if(rec.status==='stock')state.future='stock';else if(rec.status==='wishlist')state.future='wishlist';render();toast('保存しました');}}catch(err){console.error(err);toast('保存できませんでした');}
   }
   function sliderMarkup(fields,group){return fields.map(([key,label,low,high])=>`<div class="rating-row"><div class="rating-top"><span class="rating-title">${esc(label)}</span><strong class="rating-number" id="value-${group}-${key}">5</strong></div><div class="range-caption"><span>${esc(low)}</span><span>${esc(high)}</span></div><div class="rating-controls"><button type="button" class="step-btn" data-step="-1" data-group="${group}" data-key="${key}" aria-label="${esc(label)}を1下げる">−</button><input type="range" min="1" max="10" step="1" value="5" data-group="${group}" data-key="${key}" aria-label="${esc(label)}"><button type="button" class="step-btn" data-step="1" data-group="${group}" data-key="${key}" aria-label="${esc(label)}を1上げる">＋</button></div></div>`).join('');}
   function updateRange(input){const g=input.dataset.group,k=input.dataset.key;$(`value-${g}-${k}`).textContent=input.value;input.style.setProperty('--progress',`${(Number(input.value)-1)/9*100}%`);}
@@ -271,7 +315,7 @@
     state.tastePhotos=[...(session?.photos||[])];preview('tastePhotoPreview',state.tastePhotos);
     setRanges('profile',PROFILE,session?.profile);setRanges('quality',QUALITY,session?.quality);
     $('deleteTaste').classList.toggle('hidden',!session);
-    show(tasteDialog);
+    editorDirty=false;show(tasteDialog);
   }
   async function saveTaste(e){
     e.preventDefault();if(!$('tasteForm').reportValidity())return;
@@ -284,10 +328,10 @@
       createdAt:previous?.createdAt||new Date().toISOString()
     },previous?.id||id());
     const sessions=previous?rec.sessions.map(x=>x.id===previous.id?s:x):[...rec.sessions,s];
-    try{await putMany([{...rec,sessions,status:'tasted',updatedAt:new Date().toISOString()}]);await reload();close(tasteDialog);nav('techo');openDetail(rec.id);toast(previous?'評価を更新しました':'実食を追加しました');}catch(err){console.error(err);toast('保存できませんでした');}
+    try{await putMany([{...rec,sessions,status:'tasted',updatedAt:new Date().toISOString()}]);await reload();close(tasteDialog,true);nav('techo');openDetail(rec.id);toast(previous?'評価を更新しました':'実食を追加しました');}catch(err){console.error(err);toast('保存できませんでした');}
   }
-  async function deleteTaste(){const rec=get($('tasteProductId').value),sid=$('tasteId').value;if(!rec||!sid)return;if(!confirm('この回の記録を削除しますか？ 他の実食履歴は残ります。'))return;const sessions=rec.sessions.filter(s=>s.id!==sid);try{await putMany([{...rec,sessions,status:sessions.length?'tasted':'stock',updatedAt:new Date().toISOString()}]);await reload();close(tasteDialog);nav(sessions.length?'techo':'future');if(sessions.length)openDetail(rec.id);toast('この回を削除しました');}catch(e){toast('削除できませんでした');}}
-  async function deleteProduct(){const rec=get($('productId').value);if(!rec)return;if(!confirm(`「${rec.productName}」と実食履歴${rec.sessions.length}回を完全に削除しますか？`))return;try{await drop(rec.id);await reload();close(productDialog);render();toast('削除しました');}catch(e){toast('削除できませんでした');}}
+  async function deleteTaste(){const rec=get($('tasteProductId').value),sid=$('tasteId').value;if(!rec||!sid)return;if(!confirm('この回の記録を削除しますか？ 他の実食履歴は残ります。'))return;const sessions=rec.sessions.filter(s=>s.id!==sid);try{await putMany([{...rec,sessions,status:sessions.length?'tasted':'stock',updatedAt:new Date().toISOString()}]);await reload();close(tasteDialog,true);nav(sessions.length?'techo':'future');if(sessions.length)openDetail(rec.id);toast('この回を削除しました');}catch(e){toast('削除できませんでした');}}
+  async function deleteProduct(){const rec=get($('productId').value);if(!rec)return;if(!confirm(`「${rec.productName}」と実食履歴${rec.sessions.length}回を完全に削除しますか？`))return;try{await drop(rec.id);await reload();close(productDialog,true);render();toast('削除しました');}catch(e){toast('削除できませんでした');}}
   function radarPoint(index,value,radius=107){const angle=-Math.PI/2+2*Math.PI*index/6,dist=radius*(value/10);return [180+Math.cos(angle)*dist,170+Math.sin(angle)*dist];}
   function polygon(scores){return QUALITY.map(([key],i)=>radarPoint(i,num(scores?.[key])||0).map(n=>n.toFixed(1)).join(',')).join(' ');}
   function complete(scores){return QUALITY.every(([key])=>num(scores?.[key])!==null);}
@@ -343,12 +387,13 @@
       <section class="detail-section"><h3>直近の味わい</h3><p class="helper">良し悪しでなく特徴の強さを記録</p>${profileMarkup(s.profile)}</section>
       `:`<section class="detail-section"><p class="lead">${r.status==='stock'?'購入済み。食べたら評価を追加して手帖へ移せます。':'気になっている羊羹。購入したらストックに移せます。'}</p></section>`}
       <section class="detail-section"><h3>公開情報からの参考評価</h3><p class="helper">評価依頼の文章をコピーしてChatGPTで調査し、返ってきたJSONをこの商品に取り込めます。</p>
-        <button class="secondary-btn" data-action="copy">評価依頼をコピー</button>
-        <details class="import-box"><summary>JSONを貼って取り込む</summary><p class="source-note">この商品の店名・商品名が一致するかも確認します。</p><label class="field">ChatGPTの回答<textarea id="generalJSON" rows="9" placeholder='{"schemaVersion":1,"productName":"..."}'></textarea></label><div class="action-row"><button class="primary-btn" data-action="import-general">この商品に取り込む</button>${r.generalEvaluation?'<button class="danger-btn" data-action="delete-general">参考評価を削除</button>':''}</div></details></section>`;
+        <button class="secondary-btn" data-action="copy" type="button">評価依頼をコピー</button>
+        <details class="import-box"><summary>JSONを貼って取り込む</summary><p class="source-note">この商品の店名・商品名が一致するかも確認します。</p><label class="field">ChatGPTの回答<textarea id="generalJSON" rows="9" placeholder='{"schemaVersion":1,"productName":"..."}'></textarea></label><div class="action-row"><button class="primary-btn" data-action="import-general" type="button">この商品に取り込む</button>${r.generalEvaluation?'<button class="danger-btn" data-action="delete-general">参考評価を削除</button>':''}</div><p id="jsonImportStatus" class="import-feedback" role="status" aria-live="polite"></p></details></section>`;
     show(detailDialog);
     $('compareScope')?.addEventListener('change',e=>{
       state.compareScopes[r.id]=e.target.value;
-      $('comparisonPanel').innerHTML=comparisonMarkup(get(r.id),e.target.value);
+      const panel=$('comparisonPanel');panel.innerHTML=comparisonMarkup(get(r.id),e.target.value);
+      if(motionOK()){panel.classList.remove('swap-fade');void panel.offsetWidth;panel.classList.add('swap-fade');}
     });
   }
   function normalizeGeneral(raw,r){
@@ -359,16 +404,120 @@
     if(raw.productName&&cleanName(raw.productName)!==cleanName(r.productName))throw Error('商品名が登録と一致しません');
     if(raw.shopName&&cleanName(raw.shopName)!==cleanName(r.shopName))throw Error('店名が登録と一致しません');
     const cleanScores=Object.fromEntries(QUALITY.map(([key])=>[key,num(scores[key])]));
-    if(!Object.values(cleanScores).some(v=>v!==null))throw Error('有効な点数がありません');
+    if(!Object.values(cleanScores).some(v=>v!==null) && !ge.summary && !ge.evidenceSummary && !(Array.isArray(ge.sources)&&ge.sources.length))throw Error('採点も根拠も含まれていません。確認した回答を貼り付けてください。');
     return {schemaVersion:1,scores:cleanScores,summary:cleanText(ge.summary,500),evidenceSummary:cleanText(ge.evidenceSummary,1800),
       confidence:['low','medium','high'].includes(ge.confidence)?ge.confidence:'unverified',
       assessedAt:cleanText(ge.assessedAt||raw.assessedAt||'',40),sources:(Array.isArray(ge.sources)?ge.sources:[]).slice(0,8).map(s=>({label:cleanText(s?.label||'出典',120),url:http(s?.url||''),publishedAt:cleanText(s?.publishedAt||'',40)})).filter(s=>s.url),importedAt:new Date().toISOString()};
   }
   function cleanName(value){return String(value||'').normalize('NFKC').replace(/[\s　]/g,'').toLocaleLowerCase('ja');}
-  function stripFence(str){return String(str||'').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i,'$1').trim();}
-  function promptFor(r){return `次の商品を、実在する公式の商品情報と公開レビューに基づいて慎重に調査してください。可能ならWeb検索を実行し、情報の日付・出典を確認してください。\n商品名：${r?.productName||'（商品名を入力）'}\n和菓子屋：${r?.shopName||'（店名を入力）'}\n\n目的：個人の好みの評価と比較するため、「公開情報から推定した参考評価」を項目ごとに記録する。公開情報からの推定値は実測の消費者平均値ではありません。\n\n絶対条件：\n- 公式商品ページの事実と、実際に確認できた口コミの傾向と、AI自身の解釈を分けること。\n- 同一商品の特定が不十分・レビューが少ない・ある項目の根拠がない場合は、数字を捏造せず null とする。根拠が薄いから5点に置くことも禁止。\n- レビューの母数がわかればevidenceSummaryに明記する。数値は1〜10の整数かnullのみ。\n- 総合評価は他の項目の機械的平均ではなく、総合的なレビュー傾向を確認できる場合のみ推定する。\n- 公式仕様を根拠に食感や再購入意向を断定しない。\n- 確認したURLと公開年月日を記載。直接確認できない出典は入れない。\n- 必ずJSONオブジェクトのみ返却（コードフェンス・前置きは不要）。\n\nスキーマ：\n{\n "schemaVersion":1,\n "productName":"${r?.productName||'商品名'}",\n "shopName":"${r?.shopName||'店名'}",\n "generalEvaluation":{\n   "scores":{"ingredientFlavor":null,"sweetBalance":null,"texture":null,"aftertaste":null,"repeat":null,"overall":null},\n   "summary":"特徴と口コミ傾向（100字程度）",\n   "evidenceSummary":"何が一次情報か、レビュー母数・確認できた記述・推定の限界",\n   "confidence":"low",\n   "assessedAt":"調査年月日 YYYY-MM-DD",\n   "sources":[{"label":"確認できた一次情報","url":"https://example.com","publishedAt":"YYYY-MM-DD または日付不明"}]\n }\n}\n\n使用可能な scores のキーは上記6個。確度は low / medium / high のいずれか。根拠不十分の場合は null を残す。調査不能ですべてnullになる場合はJSONではなく調査不能と報告してよい。`;}
-  async function copyPrompt(record){const text=promptFor(record);try{if(navigator.clipboard && window.isSecureContext){await navigator.clipboard.writeText(text);}else{const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();if(!document.execCommand('copy'))throw Error('copy unsupported');ta.remove();}toast('評価依頼をコピーしました');}catch(e){console.error(e);toast('コピーできませんでした');}}
-  async function importGeneral(){const r=get(state.activeId);if(!r)return;try{const payload=JSON.parse(stripFence($('generalJSON').value));const ge=normalizeGeneral(payload,r);await putMany([{...r,generalEvaluation:ge,updatedAt:new Date().toISOString()}]);await reload();openDetail(r.id);toast('参考評価を取り込みました');}catch(e){alert(`取り込みできません：${e.message}`);}}
+  function normalizeSmartQuotes(jsonText){
+    // AI回答が “key”: “value” のような組版引用符を使用した場合だけ補正。
+    // 正しい半角引用符で囲まれた文字列内の “ ” は本文として保持する。
+    let output='', inside=false, closing='';
+    for(let i=0;i<jsonText.length;i++){
+      const ch=jsonText[i];
+      if(!inside){
+        if(ch==='"'||ch==='“'||ch==='”'){inside=true;closing=ch==='“'?'”':ch;output+='"';}
+        else if(ch==='：')output+=':';
+        else if(ch==='，')output+=',';
+        else output+=ch;
+        continue;
+      }
+      if(ch==='\\' && i+1<jsonText.length){output+=ch+jsonText[++i];continue;}
+      if(ch===closing){inside=false;output+='"';}else output+=ch;
+    }
+    return output;
+  }
+  function removeTrailingCommas(jsonText){
+    let output='',inside=false,escaped=false;
+    for(let i=0;i<jsonText.length;i++){
+      const ch=jsonText[i];
+      if(inside){output+=ch;if(escaped)escaped=false;else if(ch==='\\')escaped=true;else if(ch==='"')inside=false;continue;}
+      if(ch==='"'){inside=true;output+=ch;continue;}
+      if(ch===','){let j=i+1;while(/\s/.test(jsonText[j]||'')&&j<jsonText.length)j++;if(jsonText[j]==='}'||jsonText[j]===']')continue;}
+      output+=ch;
+    }
+    return output;
+  }
+  function objectCandidates(text){
+    const candidates=[], fenced=/```(?:json|javascript)?\s*([\s\S]*?)```/gi;
+    let match;while((match=fenced.exec(text))!==null)candidates.push(match[1].trim());
+    candidates.push(text.trim());
+    // 説明文の中にJSONオブジェクトがある場合、文字列中の{ }を無視して切り出す。
+    let start=-1,depth=0,inside=false,closing='',escaped=false;
+    for(let i=0;i<text.length;i++){
+      const ch=text[i];
+      if(inside){if(escaped){escaped=false;continue;}if(ch==='\\'){escaped=true;continue;}if(ch===closing)inside=false;continue;}
+      if(ch==='"'||ch==='“'||ch==='”'){inside=true;closing=ch==='“'?'”':ch;continue;}
+      if(ch==='{'){if(depth===0)start=i;depth++;}
+      else if(ch==='}'&&depth>0){depth--;if(depth===0){candidates.push(text.slice(start,i+1));start=-1;}}
+    }
+    return [...new Set(candidates.filter(Boolean))];
+  }
+  function parseGeneralText(raw){
+    const text=String(raw||'').replace(/^\uFEFF/,'').trim();
+    if(!text)throw Error('ChatGPTの回答が空です。JSONを貼り付けてください。');
+    let lastError;
+    for(const source of objectCandidates(text)){
+      for(const candidate of [source,normalizeSmartQuotes(source),removeTrailingCommas(normalizeSmartQuotes(source))]){
+        try{const parsed=JSON.parse(candidate);if(parsed && !Array.isArray(parsed) && typeof parsed==='object')return parsed;}
+        catch(err){lastError=err;}
+      }
+    }
+    throw Error('JSON形式を読み取れませんでした。回答全体を貼り付けてください。特殊な引用符とコードブロックは自動補正します。'+(lastError?'':'（JSONオブジェクトが見つかりません）'));
+  }
+  function promptFor(r){return `次の商品を、実在する公式の商品情報と公開レビューに基づいて慎重に調査してください。可能ならWeb検索を実行し、情報の日付・出典を確認してください。\n商品名：${r?.productName||'（商品名を入力）'}\n和菓子屋：${r?.shopName||'（店名を入力）'}\n\n目的：個人の好みの評価と比較するため、「公開情報から推定した参考評価」を項目ごとに記録する。公開情報からの推定値は実測の消費者平均値ではありません。\n\n絶対条件：\n- 公式商品ページの事実と、実際に確認できた口コミの傾向と、AI自身の解釈を分けること。\n- 同一商品の特定が不十分・レビューが少ない・ある項目の根拠がない場合は、数字を捏造せず null とする。根拠が薄いから5点に置くことも禁止。\n- レビューの母数がわかればevidenceSummaryに明記する。数値は1〜10の整数かnullのみ。\n- 総合評価は他の項目の機械的平均ではなく、総合的なレビュー傾向を確認できる場合のみ推定する。\n- 公式仕様を根拠に食感や再購入意向を断定しない。\n- 確認したURLと公開年月日を記載。直接確認できない出典は入れない。\n- 必ずJSONオブジェクトのみ返却（コードフェンス・前置きは不要）。\n\nスキーマ：\n{\n "schemaVersion":1,\n "productName":"${r?.productName||'商品名'}",\n "shopName":"${r?.shopName||'店名'}",\n "generalEvaluation":{\n   "scores":{"ingredientFlavor":null,"sweetBalance":null,"texture":null,"aftertaste":null,"repeat":null,"overall":null},\n   "summary":"特徴と口コミ傾向（100字程度）",\n   "evidenceSummary":"何が一次情報か、レビュー母数・確認できた記述・推定の限界",\n   "confidence":"low",\n   "assessedAt":"調査年月日 YYYY-MM-DD",\n   "sources":[{"label":"確認できた一次情報","url":"https://example.com","publishedAt":"YYYY-MM-DD または日付不明"}]\n }\n}\n\n使用可能な scores のキーは上記6個。確度は low / medium / high のいずれか。根拠不十分の場合は null を残す。調査の結果すべてnullでも、確認した事実・出典があればそのままJSONで返す。出典が一切ない場合は調査不能と報告する。`;}
+  function copyStatus(button,message,ok,copyContent=''){
+    if(!button)return;
+    if(!button.dataset.originalLabel)button.dataset.originalLabel=button.textContent;
+    button.textContent=ok?'✓ コピー完了！':button.dataset.originalLabel;
+    button.classList.toggle('copy-success',ok);
+    let note=button.nextElementSibling;
+    if(!note?.classList.contains('copy-feedback')){
+      note=document.createElement('div');note.className='copy-feedback';note.setAttribute('role','status');
+      button.insertAdjacentElement('afterend',note);
+    }
+    note.textContent=message;
+    if(!ok && copyContent){
+      const manual=document.createElement('textarea');manual.className='manual-copy';manual.readOnly=true;
+      manual.setAttribute('aria-label','手動でコピーする文章');manual.value=copyContent;
+      note.appendChild(manual);
+    }
+  }
+  async function copyPrompt(record,button){
+    const text=promptFor(record);
+    try{
+      if(navigator.clipboard?.writeText && window.isSecureContext){
+        await navigator.clipboard.writeText(text);
+      }else{
+        const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.left='-9999px';
+        document.body.appendChild(ta);
+        try{ta.focus();ta.select();if(!document.execCommand('copy'))throw Error('copy unsupported');}finally{ta.remove();}
+      }
+      copyStatus(button,'評価依頼の文章をコピーしました。ChatGPTへ貼り付けてください。',true);
+      toast('✓ コピーしました');
+    }catch(e){
+      console.error(e);
+      copyStatus(button,'自動コピーに失敗しました。下の文章を長押ししてコピーできます。',false,text);
+      toast('コピーできませんでした');
+    }
+  }
+  async function importGeneral(){
+    const r=get(state.activeId);if(!r)return;
+    const input=$('generalJSON'),raw=input?.value||'';
+    try{
+      const payload=parseGeneralText(raw),ge=normalizeGeneral(payload,r);
+      await putMany([{...r,generalEvaluation:ge,updatedAt:new Date().toISOString()}]);
+      await reload();openDetail(r.id);toast('参考評価を取り込みました');
+      const feedback=$('jsonImportStatus');if(feedback)feedback.textContent='✓ 参考評価を取り込みました';
+    }catch(e){
+      console.error(e);
+      const feedback=$('jsonImportStatus');
+      if(feedback)feedback.textContent=`取り込めませんでした：${e.message}`;
+      // 入力された文章は消さない。エラー箇所を確認して再試行可能。
+      if(input && input.value!==raw)input.value=raw;
+    }
+  }
   async function actionStock(rid){const r=get(rid);if(!r)return;try{await putMany([{...r,status:'stock',updatedAt:new Date().toISOString()}]);await reload();close(detailDialog);state.future='stock';nav('future');toast('ストックに移しました');}catch(e){toast('保存できませんでした');}}
   function mergeRecord(old,r){
     if(!old)return r;
@@ -392,7 +541,7 @@
   function handleMainClick(e){
     const btn=e.target.closest('button');if(!btn)return;
     const rid=btn.dataset.open||btn.dataset.edit||btn.dataset.stock||btn.dataset.eat;
-    if(btn.dataset.future){state.future=btn.dataset.future;renderFuture();}
+    if(btn.dataset.future){state.future=btn.dataset.future;renderFuture();if(motionOK()){main.classList.remove('view-enter');void main.offsetWidth;main.classList.add('view-enter');}}
     else if(btn.dataset.open)openDetail(rid);
     else if(btn.dataset.edit)productEditor(get(rid));
     else if(btn.dataset.stock)actionStock(rid);
@@ -407,88 +556,30 @@
       case 'taste':tasteEditor(r);break;
       case 'stock':actionStock(rid);break;
       case 'toggle-preference':putMany([{...r,includeInPreference:r.includeInPreference===false,updatedAt:new Date().toISOString()}]).then(reload).then(()=>openDetail(rid)).then(()=>toast('好み分析の対象を更新しました')).catch(e=>{console.error(e);toast('更新できませんでした');});break;
-      case 'copy':copyPrompt(r);break;
+      case 'copy':copyPrompt(r,btn);break;
       case 'import-general':importGeneral();break;
       case 'delete-general':if(confirm('参考評価を削除しますか？'))putMany([{...r,generalEvaluation:null}]).then(reload).then(()=>openDetail(rid));break;
     }
   }
-  // iOS Safari: 入力中に視覚ビューポートがキーボードで縮小する場合、
-  // エディターだけ高さを合わせる。手動ピンチズームは制限しない。
-  // focus/resizeの直後はキーボードアニメーション中のため短く再確認する。
-  function setupKeyboardViewport(){
-    const editors=[productDialog,tasteDialog];
-    const vv=window.visualViewport;
-    if(!vv) return;
-    let focusScrollTimer;
-    let rafId=0;
-    let baselineHeight=Math.max(window.innerHeight,vv.height);
-    const isTextInput = node => node?.matches?.('input:not([type="range"]):not([type="checkbox"]):not([type="file"]):not([type="hidden"]),textarea,select');
-    const activeEditor = () => editors.find(d=>d.open && d.contains(document.activeElement));
-    const keepVisible = () => {
-      const modal=activeEditor(), target=document.activeElement;
-      if(!modal||!isTextInput(target))return;
-      const modalBounds=modal.getBoundingClientRect();
-      const targetBounds=target.getBoundingClientRect();
-      // 不要なスクロールを避けるため、入力欄がキーボードに隠れた時だけ動かす。
-      if(targetBounds.bottom>modalBounds.bottom-24 || targetBounds.top<modalBounds.top+64){
-        target.scrollIntoView({block:'center',inline:'nearest',behavior:'auto'});
-      }
-    };
-    const update=()=>{
-      rafId=0;
-      if(!activeEditor()) baselineHeight=Math.max(window.innerHeight,vv.height);
-      for(const modal of editors){
-        if(!modal.open) {modal.style.removeProperty('--editor-view-height');continue;}
-        const focused=isTextInput(document.activeElement) && modal.contains(document.activeElement);
-        // Safariではキーボード表示で visualViewport.height が小さくなる。
-        // 通常時や手動ズーム中は標準の100dvhを維持する。
-        const keyboardOpen=focused && vv.scale<=1.03 && vv.height < baselineHeight-110;
-        if(keyboardOpen) modal.style.setProperty('--editor-view-height',`${Math.max(260,Math.floor(vv.height))}px`);
-        else modal.style.removeProperty('--editor-view-height');
-      }
-    };
-    const schedule=()=>{
-      if(rafId) cancelAnimationFrame(rafId);
-      rafId=requestAnimationFrame(update);
-      if(activeEditor()){
-        clearTimeout(focusScrollTimer);
-        focusScrollTimer=setTimeout(()=>{update();keepVisible();},180);
-      }
-    };
-    vv.addEventListener('resize',schedule);
-    // iOSでSafariのツールバーが動く場合も同じ方法で追従。
-    window.addEventListener('resize',schedule);
-    editors.forEach(modal=>{
-      modal.addEventListener('focusin',event=>{
-        if(!isTextInput(event.target))return;
-        schedule();
-      });
-      modal.addEventListener('focusout',()=>{
-        clearTimeout(focusScrollTimer);
-        setTimeout(schedule,60);
-      });
-      modal.addEventListener('close',()=>{
-        modal.style.removeProperty('--editor-view-height');
-        clearTimeout(focusScrollTimer);
-      });
-    });
-  }
+  // フォームは通常の文書フローでスクロールし、VisualViewportによる
+  // ダイアログ高さ変更・入力欄への強制scrollIntoViewは行わない。
   function bind(){
-    setupKeyboardViewport();
     $('addBtn').addEventListener('click',()=>productEditor(null,state.tab==='future'?state.future:'tasted'));
     document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.tab)));
     main.addEventListener('click',handleMainClick);$('detailContent').addEventListener('click',handleDetailClick);
     $('productClose').addEventListener('click',()=>close(productDialog));$('tasteClose').addEventListener('click',()=>close(tasteDialog));
     $('productForm').addEventListener('submit',saveProduct);$('tasteForm').addEventListener('submit',saveTaste);
+    [productDialog,tasteDialog].forEach(modal=>{modal.addEventListener('input',markEditorDirty);modal.addEventListener('change',markEditorDirty);modal.addEventListener('cancel',e=>{e.preventDefault();close(modal);});});
     $('deleteProduct').addEventListener('click',deleteProduct);$('deleteTaste').addEventListener('click',deleteTaste);
     $('taxonomySelectors').innerHTML=TAX_KEYS.map(tagsMarkup).join('');
     $('profileSliders').innerHTML=sliderMarkup(PROFILE,'profile');$('qualitySliders').innerHTML=sliderMarkup(QUALITY,'quality');
     tasteDialog.addEventListener('input',e=>{if(e.target.matches('input[type="range"]'))updateRange(e.target);});
-    tasteDialog.addEventListener('click',e=>{const b=e.target.closest('button[data-step]');if(!b)return;const input=tasteDialog.querySelector(`input[type="range"][data-group="${b.dataset.group}"][data-key="${b.dataset.key}"]`);input.value=Math.max(1,Math.min(10,Number(input.value)+Number(b.dataset.step)));updateRange(input);});
+    tasteDialog.addEventListener('click',e=>{const b=e.target.closest('button[data-step]');if(!b)return;const input=tasteDialog.querySelector(`input[type="range"][data-group="${b.dataset.group}"][data-key="${b.dataset.key}"]`);input.value=Math.max(1,Math.min(10,Number(input.value)+Number(b.dataset.step)));updateRange(input);editorDirty=true;});
     $('productPhotos').addEventListener('change',e=>{photosInput(e.target.files,'product');e.target.value='';});$('tastePhotos').addEventListener('change',e=>{photosInput(e.target.files,'taste');e.target.value='';});
-    $('productPhotoPreview').addEventListener('click',e=>{const b=e.target.closest('[data-remove-photo]');if(b){state.photos.splice(Number(b.dataset.removePhoto),1);preview('productPhotoPreview',state.photos);}});
-    $('tastePhotoPreview').addEventListener('click',e=>{const b=e.target.closest('[data-remove-photo]');if(b){state.tastePhotos.splice(Number(b.dataset.removePhoto),1);preview('tastePhotoPreview',state.tastePhotos);}});
-    [detailDialog,productDialog,tasteDialog].forEach(modal=>modal.addEventListener('click',e=>{if(e.target===modal)close(modal);}));
+    $('productPhotoPreview').addEventListener('click',e=>{const b=e.target.closest('[data-remove-photo]');if(b){state.photos.splice(Number(b.dataset.removePhoto),1);preview('productPhotoPreview',state.photos);editorDirty=true;}});
+    $('tastePhotoPreview').addEventListener('click',e=>{const b=e.target.closest('[data-remove-photo]');if(b){state.tastePhotos.splice(Number(b.dataset.removePhoto),1);preview('tastePhotoPreview',state.tastePhotos);editorDirty=true;}});
+    // 余白のタップでは編集フォームを閉じない。明示的な閉じるボタンだけが閉じる動線。
+    detailDialog.addEventListener('cancel',e=>{e.preventDefault();close(detailDialog);});
   }
   async function init(){bind();try{await reload();render();}catch(e){console.error(e);main.innerHTML='<p>保存領域に接続できません。通常のブラウザで開いてください。</p>';return;}
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js').catch(console.warn);}

@@ -144,3 +144,34 @@ body.editor-page-open .sheet-inner{animation:calm-appear 240ms ease-out both}
 
 /* v5.7 visible release to diagnose Safari stale cached versions */
 .app-version{font:500 10px/1 var(--body);letter-spacing:.03em;color:var(--muted);vertical-align:middle;white-space:nowrap}
+
+/* v5.9: bulk research import only; existing ratings and product UI unchanged */
+.bulk-entry{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:4px 0 15px}
+.bulk-entry p{margin:0;color:var(--muted);font-size:12px}
+.bulk-sheet textarea{width:100%;min-height:220px;font-size:16px!important;line-height:1.55;border-radius:8px;border:1px solid var(--line);background:var(--white);padding:12px;resize:vertical}
+.bulk-help{font-size:13px;line-height:1.8;color:var(--muted);overflow-wrap:anywhere}
+.bulk-help code{font-size:11px;overflow-wrap:anywhere}
+.bulk-status{font-size:13px;line-height:1.7;color:var(--brown);white-space:pre-wrap;margin:12px 0}
+.bulk-preview{padding:12px 0}
+.bulk-summary{display:flex;flex-direction:column;gap:5px;padding:15px;background:#eeeae0;border:1px solid var(--line);border-radius:9px;font-size:13px;line-height:1.7}
+.bulk-summary strong{font-size:18px}
+.bulk-candidates{display:grid;gap:12px;margin-top:14px}
+.bulk-candidate{padding:14px;border:1px solid var(--line);background:var(--white);border-radius:10px;overflow-wrap:anywhere}
+.bulk-candidate-head{display:flex;align-items:start;justify-content:space-between;gap:10px;font-size:15px}
+.bulk-candidate-head strong{font-weight:500}
+.bulk-pill{flex-shrink:0;white-space:nowrap;border-radius:12px;padding:3px 8px;font-size:11px;background:#e5e7df;color:#455b45}
+.bulk-pill.kind-update{background:#ede4da;color:#70534b}.bulk-pill.kind-review{background:#f7edcf;color:#795b24}.bulk-pill.kind-error{background:#f6dcd8;color:#803e3e}
+.bulk-warning{font-size:12px;line-height:1.65;color:#99584b;margin:10px 0}
+.bulk-select{display:flex;align-items:center;gap:10px;padding:10px 4px;line-height:1.5;font-size:13px;cursor:pointer}
+.bulk-select input{width:22px;height:22px;flex-shrink:0;accent-color:var(--brown)}
+.bulk-unavailable{font-size:12px;color:var(--muted)}
+.bulk-differences{margin:8px 0;border-top:1px dashed var(--line);padding-top:12px}
+.bulk-differences summary{font-size:13px;cursor:pointer;color:var(--brown)}
+.bulk-differences dl{margin:10px 0;display:grid;gap:7px}
+.bulk-differences dl>div{background:#f7f2ec;padding:8px;border-radius:5px}
+.bulk-differences dt{font-size:11px;color:var(--muted)}
+.bulk-differences dd{font-size:12px;margin:3px 0 0;overflow-wrap:anywhere}
+#bulkSave:disabled{opacity:.5;cursor:default}
+body.editor-page-open #bulkDialog{position:relative;display:block;inset:auto;width:min(100%,720px);height:auto;min-height:100svh;max-height:none;margin:0 auto;padding:0;overflow:visible}
+body.editor-page-open #bulkDialog:not([open]){display:none}
+@media(prefers-reduced-motion:reduce){.bulk-candidate{transition:none}}

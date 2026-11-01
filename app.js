@@ -16,8 +16,8 @@
     ['overall','総合評価','低い','高い','総合評価']
   ];
   const $ = id => document.getElementById(id);
-  const main = $('main'), productDialog = $('productDialog'), tasteDialog = $('tasteDialog'), detailDialog = $('detailDialog');
-  const state = {records:[], tab:'techo', future:'wishlist', query:'', sort:'new', photos:[], tastePhotos:[], activeId:null, rankScope:'all', analysisScope:'all', prefThreshold:8, compareScopes:{}};
+  const main = $('main'), productDialog = $('productDialog'), tasteDialog = $('tasteDialog'), detailDialog = $('detailDialog'), bulkDialog = $('bulkDialog');
+  const state = {records:[], tab:'techo', future:'wishlist', query:'', sort:'new', photos:[], tastePhotos:[], activeId:null, rankScope:'all', analysisScope:'all', prefThreshold:8, compareScopes:{}, bulk:null};
   const esc = (s='') => String(s ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
   const num = value => { if(value === '' || value === null || value === undefined) return null; const n=Number(value); return Number.isFinite(n) && n>=1 && n<=10 ? n : null; };
   const avg = values => {const ns=values.filter(n=>n!==null && Number.isFinite(n));return ns.length ? ns.reduce((a,b)=>a+b,0)/ns.length : null;};
@@ -101,7 +101,7 @@
     });return dbPromise;
   }
   async function getAll(){const db=await openDB();return new Promise((resolve,reject)=>{const req=db.transaction(STORE,'readonly').objectStore(STORE).getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});}
-  async function putMany(records){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');for(const r of records)tx.objectStore(STORE).put(r);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('transaction aborted'));});}
+  async function putMany(records){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('transaction aborted'));try{for(const r of records)tx.objectStore(STORE).put(r);}catch(e){try{tx.abort();}catch{}reject(e);}});}
   async function drop(key){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
   function normalizedSession(raw, fallbackId){
     const r=raw&&typeof raw==='object'?raw:{};
@@ -141,10 +141,10 @@
   function toast(message){document.querySelector('.toast')?.remove();const node=document.createElement('div');node.className='toast';node.textContent=message;document.body.append(node);setTimeout(()=>node.remove(),2800);}
   // 入力フォームはiOS Safariのキーボード/VisualViewport競合を避けるため、
   // 全画面モーダルではなく通常のスクロール可能なページとして開く。
-  const isEditor = modal => modal===productDialog || modal===tasteDialog;
+  const isEditor = modal => modal===productDialog || modal===tasteDialog || modal===bulkDialog;
   let editorDirty = false;
   function markEditorDirty(event){
-    if((productDialog.open && productDialog.contains(event.target)) || (tasteDialog.open && tasteDialog.contains(event.target))) editorDirty=true;
+    if((productDialog.open && productDialog.contains(event.target)) || (tasteDialog.open && tasteDialog.contains(event.target)) || (bulkDialog.open && bulkDialog.contains(event.target))) editorDirty=true;
   }
   const show = modal => {
     if(modal.open)return;
@@ -161,7 +161,7 @@
     }
     if(isEditor(modal))editorDirty=false;
     modal.close();
-    if(isEditor(modal) && !productDialog.open && !tasteDialog.open){
+    if(isEditor(modal) && !productDialog.open && !tasteDialog.open && !bulkDialog.open){
       document.body.classList.remove('editor-page-open');
       window.scrollTo(0,0);
     }
@@ -184,7 +184,7 @@
   function renderFuture(){
     const wish=state.records.filter(r=>r.status==='wishlist').length,stock=state.records.filter(r=>r.status==='stock').length;
     const arr=state.records.filter(r=>r.status===state.future).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
-    main.innerHTML=`<h2 class="section-title">これからの羊羹</h2><p class="lead">食べたい気持ちも、買っておいた楽しみも、一緒に記録。</p>
+    main.innerHTML=`<h2 class="section-title">これからの羊羹</h2><p class="lead">食べたい気持ちも、買っておいた楽しみも、一緒に記録。</p><div class="bulk-entry"><button type="button" class="secondary-btn" data-bulk-open>まとめて取り込む</button><p>複数商品の調査結果を一度に登録できます。</p></div>
       <div class="future-filter"><button type="button" data-future="wishlist" class="${state.future==='wishlist'?'active':''}">食べたいリスト (${wish})</button><button type="button" data-future="stock" class="${state.future==='stock'?'active':''}">ストック (${stock})</button></div>
       ${arr.length?`<div class="list">${arr.map(r=>`<div class="future-card">${card(r,true)}<div class="action-row"><button type="button" class="secondary-btn small-btn" data-edit="${esc(r.id)}">編集する</button>${r.status==='wishlist'?`<button type="button" class="primary-btn small-btn" data-stock="${esc(r.id)}">購入した → ストックへ</button>`:`<button type="button" class="primary-btn small-btn" data-eat="${esc(r.id)}">食べた → 評価する</button>`}</div></div>`).join('')}</div>`:empty(state.future==='wishlist'?'食べたい羊羹はまだありません':'ストックはまだありません')}`;
   }
@@ -881,6 +881,191 @@ YOKAN_TECHO_END
     }
   }
   async function actionStock(rid){const r=get(rid);if(!r)return;try{await putMany([{...r,status:'stock',updatedAt:new Date().toISOString()}]);await reload();close(detailDialog);state.future='stock';nav('future');toast('ストックに移しました');}catch(e){toast('保存できませんでした');}}
+
+  // v5.9: 複数商品は必ず分割してから既存の単品パーサーへ渡す。
+  // 連結全体を parseTaggedResearch() に渡すと先頭商品が黙って消える。
+  function splitBulkResearch(raw){
+    const src=String(raw||'').replace(/\r\n?/g,'\n').replace(/^\uFEFF/,'').trim();
+    const marker=/^[ \t]*YOKAN_TECHO_FORMAT_V1(?=[ \t]|\n|$)/gm;
+    const starts=[...src.matchAll(marker)].map(m=>m.index);
+    if(!starts.length)throw Error('開始マーカー YOKAN_TECHO_FORMAT_V1 がありません。');
+    const prefix=src.slice(0,starts[0]).trim();
+    if(prefix && !/^```(?:text)?$/i.test(prefix))throw Error('最初の開始マーカーより前に不明な文章があります。先頭から取り込み専用テキストを貼り付けてください。');
+    // 行頭以外に埋め込まれた開始マーカーがある場合は境界不明として全体を止める。
+    const totalMarkers=[...src.matchAll(/\bYOKAN_TECHO_FORMAT_V1\b/g)].length;
+    if(totalMarkers!==starts.length)throw Error('開始マーカーの数と行頭で検出した商品数が一致しません。改行を確認してください。');
+    const blocks=starts.map((start,i)=>{
+      const text=src.slice(start,starts[i+1]??src.length).trim().replace(/\n```$/,'').trim();
+      const endMatches=[...text.matchAll(/\bYOKAN_TECHO_END\b/g)];
+      if(!endMatches.length)return {index:i+1,text,error:'終端マーカー YOKAN_TECHO_END がありません。次の商品開始位置で区切り、今回は保留しました。'};
+      if(endMatches.length!==1)return {index:i+1,text,error:'終端マーカーが複数あります。境界を確認してください。'};
+      const end=endMatches[0];
+      if(text.slice(end.index+end[0].length).trim())throw Error(`${i+1}件目の終端マーカーより後ろに不明な文章があります。保存を中止しました。`);
+      return {index:i+1,text:text.slice(0,end.index+end[0].length)};
+    });
+    if(blocks.length!==starts.length)throw Error('検出件数が一致しません。保存を中止しました。');
+    return blocks;
+  }
+  function isRealISODate(value){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return false;
+    const dt=new Date(value+'T00:00:00Z');
+    return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0,10)===value;
+  }
+  function bulkKey(productName,shopName){return cleanName(productName)+'\u001f'+cleanName(shopName);}
+  function bulkProductParts(payload){
+    const info=payload.productInfo||{};
+    const rawMaterials=splitTags(info.materials),rawTextures=splitTags(info.textures);
+    return {
+      method:validMethod(info.method||''),
+      materials:rawMaterials.filter(v=>TAX_OPTIONS.materials.includes(v)),
+      textures:rawTextures.filter(v=>TAX_OPTIONS.textures.includes(v)),
+      styles:splitTags(info.styles),
+      ingredients:splitTags(info.ingredients),
+      manufacturerName:cleanText(info.manufacturerName||'',120),url:http(info.url||'')
+    };
+  }
+  function candidateToNewRecord(candidate){
+    const p=candidate.payload,now=new Date().toISOString(),t=bulkProductParts(p);
+    return normalizeRecord({id:id(),productName:p.productName.trim(),shopName:p.shopName.trim(),
+      status:'wishlist',sessions:[],photos:[],yokanType:t.method,
+      taxonomy:{method:t.method,materials:t.materials,textures:t.textures,styles:t.styles},
+      flavorTags:t.materials.join('、'),manufacturerName:t.manufacturerName,ingredients:t.ingredients,
+      url:t.url,generalEvaluation:candidate.ge,includeInPreference:true,
+      createdAt:now,updatedAt:now});
+  }
+  function classifyBulkResearch(blocks,records){
+    const existing=new Map();
+    for(const r of records){const key=bulkKey(r.productName,r.shopName);existing.set(key,[...(existing.get(key)||[]),r]);}
+    const classified=blocks.map(b=>{
+      const base={index:b.index,kind:'error',label:`${b.index}件目`,reason:'',warnings:[],approved:false,applyInfo:false,canApprove:false};
+      if(b.error)return {...base,reason:b.error};
+      try{
+        const payload=parseTaggedResearch(b.text);
+        if(!payload||!payload.productName?.trim()||!payload.shopName?.trim())throw Error('商品名または登録店名がありません。');
+        const ge=normalizeGeneral(payload,{productName:payload.productName,shopName:payload.shopName});
+        // 推測で原材料を分類材料から補完しない（既存単品取り込みは変更しない）。
+        if(ge.productInfo)ge.productInfo.ingredients=splitTags(payload.productInfo?.ingredients||'');
+        if(!ge.officialInfo?.trim()||!ge.reviewTrends?.trim())throw Error('公式情報とレビュー傾向は両方必要です。');
+        if(!isRealISODate(ge.assessedAt))throw Error('調査日（assessedAt）が実在する YYYY-MM-DD 形式ではありません。');
+        const label=`${payload.productName} ／ ${payload.shopName}`;
+        return {...base,label,payload,ge,key:bulkKey(payload.productName,payload.shopName),kind:'new',canApprove:true,approved:true};
+      }catch(e){return {...base,reason:String(e.message||e)};}
+    });
+    const keys=new Map();
+    for(const item of classified.filter(x=>x.key))keys.set(item.key,(keys.get(item.key)||0)+1);
+    for(const item of classified.filter(x=>x.payload)){
+      if(keys.get(item.key)>1){item.kind='review';item.approved=false;item.canApprove=false;item.reason='この貼り付け内に同じ商品名・登録店名が複数あります。内容を整理してから再取り込みしてください。';continue;}
+      const matches=existing.get(item.key)||[];
+      if(matches.length>1){item.kind='review';item.approved=false;item.canApprove=false;item.reason='既存に同名・同店のレコードが複数あります。個別に確認してください。';continue;}
+      if(matches.length===1){
+        item.kind='update';item.targetId=matches[0].id;
+        // 他商品の固有サイズ・派生品を同名の商品へ誤って統合しない。
+        const official=cleanName(item.payload.productInfo?.productName||'');
+        const current=cleanName(matches[0].generalEvaluation?.productInfo?.productName||matches[0].productName);
+        if(official && official!==current){
+          item.kind='review';item.canApprove=false;item.approved=false;
+          item.reason='公式商品名と既存の登録情報に差があります。容量・派生品の違いがないか個別に確認してください。';
+          continue;
+        }
+        const oldDate=matches[0].generalEvaluation?.assessedAt||'';
+        if(!isRealISODate(oldDate) || item.ge.assessedAt<=oldDate){
+          item.warnings.push(`既存調査日：${oldDate||'不明'}、新規調査日：${item.ge.assessedAt}。更新を個別に承認してください。`);
+        }
+        item.infoUpdates=productInfoUpdates(matches[0],item.ge.productInfo);
+      }
+      if(!item.ge.sources.length)item.warnings.push('参照URLが0件です。調査結果の根拠を確認してください。');
+      if(item.warnings.length){item.kind='review';item.approved=false;item.canApprove=true;}
+    }
+    return classified;
+  }
+  function bulkStatusLabel(item){return item.kind==='new'?'新規':item.kind==='update'?'更新':item.kind==='review'?'要確認':'エラー';}
+  function renderBulkPreview(){
+    const batch=state.bulk;if(!batch)return;
+    const counts={new:0,update:0,review:0,error:0};
+    for(const item of batch.candidates)counts[item.kind]++;
+    const checked=batch.candidates.filter(c=>c.canApprove&&c.approved).length;
+    $('bulkPreview').innerHTML=`<div class="bulk-summary"><strong>検出 ${batch.count}件</strong><span>新規 ${counts.new}件 ／ 更新 ${counts.update}件 ／ 要確認 ${counts.review}件 ／ エラー ${counts.error}件</span></div>
+      <p class="bulk-help">要確認の商品は明示的に選択するまで保存しません。商品情報の修正は別途チェックが必要です。</p>
+      <div class="bulk-candidates">${batch.candidates.map(item=>`
+      <article class="bulk-candidate" data-bulk-row="${item.index}">
+        <div class="bulk-candidate-head"><strong>${esc(item.index)}. ${esc(item.label)}</strong><span class="bulk-pill kind-${item.kind}">${bulkStatusLabel(item)}</span></div>
+        ${item.reason?`<p class="bulk-warning">${esc(item.reason)}</p>`:''}
+        ${item.warnings.map(w=>`<p class="bulk-warning">${esc(w)}</p>`).join('')}
+        ${item.canApprove?`<label class="bulk-select"><input type="checkbox" data-bulk-check="${item.index}" ${item.approved?'checked':''}><span>${item.kind==='review'?'確認したので、この調査結果を保存する':'調査結果を保存する'}</span></label>`:
+          `<p class="bulk-unavailable">この商品は今回の保存対象外です。</p>`}
+        ${item.targetId && item.infoUpdates?.length?`<details class="bulk-differences"><summary>商品情報の修正候補（${item.infoUpdates.length}項目）</summary><dl>${item.infoUpdates.map(u=>`<div><dt>${esc(u.label)}</dt><dd>${esc(u.from||'—')} → ${esc(u.to||'—')}</dd></div>`).join('')}</dl><label class="bulk-select"><input type="checkbox" data-bulk-info="${item.index}" ${item.applyInfo?'checked':''} ${!item.approved?'disabled':''}><span>上記の商品情報も反映する（登録店名は保持）</span></label></details>`:''}
+      </article>`).join('')}</div>`;
+    $('bulkSave').textContent=`確認済みの${checked}件を保存する`;
+    $('bulkSave').disabled=checked===0;
+    $('bulkSave').classList.remove('hidden');
+  }
+  function onBulkSelection(event){
+    if(!state.bulk)return;
+    const box=event.target;
+    if(!box.matches('[data-bulk-check], [data-bulk-info]'))return;
+    const index=Number(box.dataset.bulkCheck||box.dataset.bulkInfo);
+    const item=state.bulk.candidates.find(i=>i.index===index);if(!item)return;
+    if(box.hasAttribute('data-bulk-check')){item.approved=item.canApprove&&box.checked;if(!item.approved)item.applyInfo=false;}
+    else item.applyInfo=item.approved&&box.checked;
+    renderBulkPreview();
+  }
+  function openBulkImport(){
+    // フォームは通常のページフローでスクロール。iPhoneのキーボードと競合しない。
+    if(!bulkDialog.open)show(bulkDialog);
+    if(!state.bulk && $('bulkText').value.trim())$('bulkStatus').textContent='貼り付けたテキストが残っています。「内容を確認」から再開できます。';
+  }
+  function previewBulkImport(){
+    const raw=$('bulkText').value;
+    try{
+      const blocks=splitBulkResearch(raw);
+      const candidates=classifyBulkResearch(blocks,state.records);
+      if(blocks.length!==candidates.length || candidates.some((c,i)=>c.index!==blocks[i].index))throw Error('商品検出件数と解析結果の件数が一致しません。');
+      state.bulk={raw,count:blocks.length,candidates};
+      $('bulkStatus').textContent='解析が完了しました。新規・更新・要確認を確認してください。';
+      renderBulkPreview();
+    }catch(e){state.bulk=null;$('bulkPreview').innerHTML='';$('bulkSave').classList.add('hidden');$('bulkStatus').textContent='確認できませんでした：'+(e.message||e);}
+  }
+  async function saveBulkImport(){
+    const batch=state.bulk;if(!batch)return;
+    const selected=batch.candidates.filter(c=>c.canApprove&&c.approved);
+    if(!selected.length){$('bulkStatus').textContent='保存する商品が選択されていません。';return;}
+    const button=$('bulkSave');button.disabled=true;
+    try{
+      // プレビュー後に別画面などでデータが変更された場合、既存データを上書きしない。
+      const rawCurrent=await getAll();
+      const current=rawCurrent.map(normalizeRecord);
+      if(JSON.stringify(current)!==JSON.stringify(state.records)){
+        await reload();state.bulk=null;$('bulkSave').classList.add('hidden');$('bulkPreview').innerHTML='';
+        throw Error('プレビュー後に保存済みの商品データが変更されました。「内容を確認」をやり直してください。');
+      }
+      const now=new Date().toISOString();
+      const writes=[];
+      for(const candidate of selected){
+        if(!candidate.targetId){writes.push(candidateToNewRecord(candidate));continue;}
+        const original=current.find(r=>r.id===candidate.targetId);
+        if(!original)throw Error('更新対象の商品が見つかりません。再度確認してください。');
+        // Save only the imported research; do not re-normalize existing sessions/photos.
+        const stored=rawCurrent.find(r=>r.id===candidate.targetId);
+        const next={...stored,generalEvaluation:candidate.ge,updatedAt:now};
+        if(candidate.applyInfo){
+          // 既存写真・セッション・評価・状態・登録店名を維持し、了承した項目のみ変更する。
+          next.taxonomy={...original.taxonomy,materials:[...original.taxonomy.materials],textures:[...original.taxonomy.textures],styles:[...original.taxonomy.styles]};
+          for(const change of candidate.infoUpdates||[])change.apply(next);
+          next.yokanType=next.taxonomy.method;
+        }
+        writes.push(next);
+      }
+      if(new Set(writes.map(r=>r.id)).size!==writes.length)throw Error('更新対象のIDが重複しています。');
+      await putMany(writes);
+      await reload();
+      const count=writes.length;
+      state.bulk=null;editorDirty=false;$('bulkText').value='';$('bulkPreview').innerHTML='';$('bulkSave').classList.add('hidden');
+      $('bulkStatus').textContent=`${count}件の保存が完了しました。保留・エラーの商品は保存していません。`;
+      close(bulkDialog,true);state.future='wishlist';nav('future');toast(`${count}件を一括保存しました`);
+    }catch(e){console.error(e);$('bulkStatus').textContent='保存できませんでした：'+(e.message||e)+'。貼り付け内容は保持されています。';}
+    finally{if(bulkDialog.open)button.disabled=false;}
+  }
+
   function mergeRecord(old,r){
     if(!old)return r;
     const sessions=new Map(r.sessions.map(s=>[s.id,s]));for(const s of old.sessions)sessions.set(s.id,s);
@@ -903,6 +1088,7 @@ YOKAN_TECHO_END
   function handleMainClick(e){
     const btn=e.target.closest('button');if(!btn)return;
     const rid=btn.dataset.open||btn.dataset.edit||btn.dataset.stock||btn.dataset.eat;
+    if(btn.dataset.bulkOpen!==undefined){openBulkImport();return;}
     if(btn.dataset.future){state.future=btn.dataset.future;renderFuture();if(motionOK()){main.classList.remove('view-enter');void main.offsetWidth;main.classList.add('view-enter');}}
     else if(btn.dataset.open)openDetail(rid);
     else if(btn.dataset.edit)productEditor(get(rid));
@@ -930,6 +1116,13 @@ YOKAN_TECHO_END
     document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>nav(b.dataset.tab)));
     main.addEventListener('click',handleMainClick);$('detailContent').addEventListener('click',handleDetailClick);
     $('productClose').addEventListener('click',()=>close(productDialog));$('tasteClose').addEventListener('click',()=>close(tasteDialog));
+    $('bulkClose').addEventListener('click',()=>close(bulkDialog));
+    $('bulkAnalyze').addEventListener('click',previewBulkImport);
+    $('bulkSave').addEventListener('click',saveBulkImport);
+    $('bulkText').addEventListener('input',()=>{state.bulk=null;$('bulkPreview').innerHTML='';$('bulkSave').classList.add('hidden');$('bulkStatus').textContent='入力が変更されました。再度「内容を確認」を押してください。';});
+    $('bulkPreview').addEventListener('change',onBulkSelection);
+    bulkDialog.addEventListener('input',markEditorDirty);bulkDialog.addEventListener('change',markEditorDirty);
+    bulkDialog.addEventListener('cancel',e=>{e.preventDefault();close(bulkDialog);});
     $('productForm').addEventListener('submit',saveProduct);$('tasteForm').addEventListener('submit',saveTaste);
     [productDialog,tasteDialog].forEach(modal=>{modal.addEventListener('input',markEditorDirty);modal.addEventListener('change',markEditorDirty);modal.addEventListener('cancel',e=>{e.preventDefault();close(modal);});});
     $('deleteProduct').addEventListener('click',deleteProduct);$('deleteTaste').addEventListener('click',deleteTaste);

@@ -168,7 +168,7 @@
     return true;
   };
   function gallery(src){return src ? `<img class="product-photo" src="${esc(src)}" alt="商品写真" loading="lazy" decoding="async">` : '<div class="product-photo placeholder">ようかん</div>';}
-  function empty(message){return `<div class="empty-state"><img src="./icon-180.png" alt=""><h2>${esc(message)}</h2><p>右上の「＋ 記録」から登録できます。</p></div>`;}
+  function empty(message){return `<div class="empty-state"><img src="./icon-180.png" alt=""><h2>${esc(message)}</h2><p>右下の「＋ 記録」から登録できます。</p></div>`;}
   function card(r,insideFuture=false){const s=latest(r);return `<button type="button" class="product-card" data-open="${esc(r.id)}">${gallery(productPhoto(r))}<div class="product-body"><h2 class="product-name">${esc(r.productName)}</h2><p class="product-shop">${esc(r.shopName)}</p><p class="product-meta">${esc(r.taxonomy.method)}${s?` · ${fmtDate(s.tastedDate)} · ${r.sessions.length}回` : insideFuture?` · ${r.status==='stock'?'購入済み':'未購入'}`:''}</p></div></button>`;}
   function renderTecho(){
     const rec=state.records.filter(r=>r.status==='tasted');

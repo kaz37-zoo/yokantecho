@@ -184,11 +184,12 @@ a { color: var(--primary); text-underline-offset: 3px; }
   line-height: 1.5;
 }
 /* Floating record action: bottom-right in the thumb zone, above the tab bar.
-   Pill shape with its text label kept (this app's controls are text-based). */
+   Short rounded rectangle (a slice of yokan); right edge aligned with the
+   content margin. Text label kept (this app's controls are text-based). */
 .fab {
   position: fixed;
   z-index: 21;
-  right: var(--space-4);
+  right: var(--space-2);
   bottom: calc(100px + env(safe-area-inset-bottom));
   min-height: 56px;
   padding-inline: var(--space-3);

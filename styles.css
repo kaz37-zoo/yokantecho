@@ -474,12 +474,12 @@ input[type="range"]::-moz-range-thumb { width: 32px; height: 32px; border: 4px s
 .radar-svg { display: block; width: 100%; max-width: 390px; margin: auto; overflow: visible; }
 .radar-grid, .radar-axis { stroke: var(--line-control); stroke-opacity: .7; fill: none; stroke-width: 1; }
 .radar-poly.personal { stroke: var(--primary); stroke-width: 2.5; fill: rgb(115 88 77 / 15%); }
-.radar-poly.average { stroke: var(--accent); stroke-width: 2.5; fill: rgb(89 107 81 / 14%); }
+.radar-poly.average { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 6 4; fill: rgb(89 107 81 / 14%); }
 .radar-label { font: var(--font-sm) var(--font-body); fill: var(--text); }
 .legend { display: flex; justify-content: center; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0; font-size: var(--font-sub); }
 .legend span { display: flex; align-items: center; gap: var(--space-1); }
-.legend i { display: inline-block; width: 16px; height: 16px; border-radius: var(--radius-round); background: var(--primary); }
-.legend .avg { background: var(--accent); }
+.legend i { display: inline-block; width: 18px; height: 3px; background: var(--primary); }
+.legend .avg { height: 0; background: transparent; border-top: 3px dashed var(--accent); }
 .chart-caption { margin: var(--space-2) 0; color: var(--text-sub); font-size: var(--font-sub); line-height: var(--line-height); text-align: center; }
 .compare-table { width: 100%; margin-top: var(--space-2); border-collapse: collapse; font-size: var(--font-sub); }
 .compare-table th, .compare-table td { padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--line); text-align: right; }

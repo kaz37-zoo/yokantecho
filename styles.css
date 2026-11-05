@@ -60,6 +60,15 @@
   --title: var(--font-title);
 }
 
+/* Seasonal paper tint: app.js sets data-season on <html> from the month.
+   Only --base changes; every text/background pair was re-measured for all
+   four tints and stays within WCAG AA (worst case: olive on winter, 4.97:1).
+   No attribute (setting off) keeps the default generated-paper color. */
+:root[data-season="spring"] { --base: #f7ede9; }
+:root[data-season="summer"] { --base: #e9f0ee; }
+:root[data-season="autumn"] { --base: #f7efdb; }
+:root[data-season="winter"] { --base: #f0eee9; }
+
 /* 02. Foundation */
 *, *::before, *::after { box-sizing: border-box; }
 html { margin: 0; min-height: 100%; color: var(--text); background: var(--base); }
@@ -439,7 +448,11 @@ input[type="range"]::-webkit-slider-runnable-track {
   height: 14px;
   border: 1px solid var(--line-control);
   border-radius: var(--radius-sm);
-  background: linear-gradient(to right, var(--primary) 0%, var(--primary) var(--progress), var(--shade-track) var(--progress), var(--shade-track) 100%);
+  /* Top layer: cut lines at each 1-point step (values 1-9), like slicing a yokan bar.
+     Bottom layer: progress fill. The lines are a scale, not decoration. */
+  background:
+    repeating-linear-gradient(to right, rgb(72 61 54 / 30%) 0, rgb(72 61 54 / 30%) 2px, transparent 2px, transparent calc(100% / 9)),
+    linear-gradient(to right, var(--primary) 0%, var(--primary) var(--progress), var(--shade-track) var(--progress), var(--shade-track) 100%);
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;

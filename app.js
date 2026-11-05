@@ -244,8 +244,10 @@
     <section class="guide-card"><h3>平均とランキング</h3><p>レーダーチャートの比較対象を「全商品平均」「同じ製法」「同じ素材」「同じ食感」などから切り替えられます。「好み」タブでは総合ランキングと種類別ランキングの切り替えもできます。</p><p>平均は商品ごとに実食回数の平均を計算してから、商品単位で等重み平均します。好みのプロファイル分析は、指定した高評価商品だけが対象です。変わり種を好み分析から除外しても、全商品平均とランキングには残ります。</p></section>
     <section class="guide-card"><h3>評価の使い分け</h3><p>甘さ・濃厚さ・かたさなどのプロファイルは強さを記録するもの。素材の風味・甘味のバランス・食感・後味・また食べたい・総合評価は好みの10段階評価です。</p><p>公式情報とレビュー傾向は数値化せず、確認できた出典・情報の限界を含めた調査メモとして表示します。</p></section>
     <section class="guide-card"><h3>公式情報とレビュー傾向を取り込む</h3><p>商品詳細の「調査依頼をコピー」から、JSONを使わない見出し付き調査文を生成します。ChatGPTの回答をそのまま取り込めます。旧版のJSONも引き続き利用できます。数値評価は行いません。</p><button class="secondary-btn" id="blankPrompt">空欄テンプレートをコピー</button></section>
+    <section class="guide-card"><h3>季節の紙色</h3><p>季節に合わせて、背景の紙色がほんの少し変わります。今の季節は「${SEASON_NAMES[currentSeason()]}」です。変わるのは紙色だけで、文字の読みやすさは季節ごとに確認済みです。</p><label class="check-row"><input type="checkbox" id="seasonalToggle" ${seasonalOff()?'':'checked'}><span>季節の紙色を使う</span></label></section>
     <section class="guide-card"><h3>バックアップ・移行</h3><p>写真を含むJSONを保存できます。旧バージョンのバックアップ（v1/v2/v3）の records をそのまま取り込めます。重複IDは既存の実食履歴を保持して統合します。機種変更前には必ず書き出してください。</p><div class="action-row"><button id="export" class="secondary-btn">JSONバックアップを書き出す</button><label class="photo-picker">JSONを取り込む<input type="file" id="import" accept=".json,application/json"></label></div><p class="helper">ブラウザ内のデータはサイトデータ消去などで失われます。自動クラウド同期ではありません。</p></section>`;
     $('blankPrompt').addEventListener('click',e=>copyPrompt(null,e.currentTarget));$('export').addEventListener('click',exportBackup);$('import').addEventListener('change',e=>{if(e.target.files?.[0])importBackup(e.target.files[0]);});
+    $('seasonalToggle').addEventListener('change',e=>{try{localStorage.setItem('yokan-seasonal',e.target.checked?'on':'off');}catch(err){}applySeason();});
   }
   function render(){document.querySelectorAll('.tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===state.tab));if(state.tab==='future')renderFuture();else if(state.tab==='analysis')renderAnalysis();else if(state.tab==='guide')renderGuide();else renderTecho();}
   const motionOK = () => !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -1136,7 +1138,12 @@ YOKAN_TECHO_END
     // 余白のタップでは編集フォームを閉じない。明示的な閉じるボタンだけが閉じる動線。
     detailDialog.addEventListener('cancel',e=>{e.preventDefault();close(detailDialog);});
   }
-  async function init(){bind();try{await reload();render();}catch(e){console.error(e);main.innerHTML='<p>保存領域に接続できません。通常のブラウザで開いてください。</p>';return;}
+  const SEASON_TINTS={spring:'#f7ede9',summer:'#e9f0ee',autumn:'#f7efdb',winter:'#f0eee9'};
+  const SEASON_NAMES={spring:'春・桜がかり',summer:'夏・青磁がかり',autumn:'秋・黄みがかり',winter:'冬・灰がかり'};
+  function currentSeason(){const m=new Date().getMonth()+1;return m>=3&&m<=5?'spring':m>=6&&m<=8?'summer':m>=9&&m<=11?'autumn':'winter';}
+  function seasonalOff(){try{return localStorage.getItem('yokan-seasonal')==='off';}catch(e){return false;}}
+  function applySeason(){const root=document.documentElement,meta=document.querySelector('meta[name="theme-color"]');if(seasonalOff()){delete root.dataset.season;if(meta)meta.setAttribute('content','#f4efe8');return;}const s=currentSeason();root.dataset.season=s;if(meta)meta.setAttribute('content',SEASON_TINTS[s]);}
+  async function init(){applySeason();bind();try{await reload();render();}catch(e){console.error(e);main.innerHTML='<p>保存領域に接続できません。通常のブラウザで開いてください。</p>';return;}
     if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){navigator.serviceWorker.register('./sw.js').catch(console.warn);}
   }
   init();

@@ -134,7 +134,7 @@ a { color: var(--primary); text-underline-offset: 3px; }
   gap: var(--space-1);
   padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--base);
 }
 .tab {
   position: relative;
@@ -191,8 +191,8 @@ a { color: var(--primary); text-underline-offset: 3px; }
   right: var(--space-4);
   bottom: calc(100px + env(safe-area-inset-bottom));
   min-height: 56px;
-  padding-inline: var(--space-5);
-  border-radius: var(--radius-pill);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-card);
   box-shadow: 0 4px 16px rgb(59 45 38 / 20%);
   font-size: var(--font-body-size);
 }

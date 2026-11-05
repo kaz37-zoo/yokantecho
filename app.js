@@ -168,7 +168,7 @@
     return true;
   };
   function gallery(src){return src ? `<img class="product-photo" src="${esc(src)}" alt="商品写真" loading="lazy" decoding="async">` : '<div class="product-photo placeholder">ようかん</div>';}
-  function empty(message){return `<div class="empty-state"><img src="./icon-180.png" alt=""><h2>${esc(message)}</h2><p>右下の「＋ 記録」から登録できます。</p></div>`;}
+  function empty(message,hint='右下の「＋ 記録」から登録できます。'){return `<div class="empty-state"><img src="./icon-180.png" alt=""><h2>${esc(message)}</h2><p>${esc(hint)}</p></div>`;}
   function card(r,insideFuture=false){const s=latest(r);return `<button type="button" class="product-card" data-open="${esc(r.id)}">${gallery(productPhoto(r))}<div class="product-body"><h2 class="product-name">${esc(r.productName)}</h2><p class="product-shop">${esc(r.shopName)}</p><p class="product-meta">${esc(r.taxonomy.method)}${s?` · ${fmtDate(s.tastedDate)} · ${r.sessions.length}回` : insideFuture?` · ${r.status==='stock'?'購入済み':'未購入'}`:''}</p></div></button>`;}
   function renderTecho(){
     const rec=state.records.filter(r=>r.status==='tasted');
@@ -186,7 +186,7 @@
     const arr=state.records.filter(r=>r.status===state.future).sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''));
     main.innerHTML=`<h2 class="section-title">これからの羊羹</h2><p class="lead">食べたい気持ちも、買っておいた楽しみも、一緒に記録。</p><div class="bulk-entry"><button type="button" class="secondary-btn" data-bulk-open>まとめて取り込む</button><p>複数商品の調査結果を一度に登録できます。</p></div>
       <div class="future-filter"><button type="button" data-future="wishlist" class="${state.future==='wishlist'?'active':''}">食べたいリスト (${wish})</button><button type="button" data-future="stock" class="${state.future==='stock'?'active':''}">ストック (${stock})</button></div>
-      ${arr.length?`<div class="list">${arr.map(r=>`<div class="future-card">${card(r,true)}<div class="action-row"><button type="button" class="secondary-btn small-btn" data-edit="${esc(r.id)}">編集する</button>${r.status==='wishlist'?`<button type="button" class="primary-btn small-btn" data-stock="${esc(r.id)}">購入した → ストックへ</button>`:`<button type="button" class="primary-btn small-btn" data-eat="${esc(r.id)}">食べた → 評価する</button>`}</div></div>`).join('')}</div>`:empty(state.future==='wishlist'?'食べたい羊羹はまだありません':'ストックはまだありません')}`;
+      ${arr.length?`<div class="list">${arr.map(r=>`<div class="future-card">${card(r,true)}<div class="action-row"><button type="button" class="secondary-btn small-btn" data-edit="${esc(r.id)}">編集する</button>${r.status==='wishlist'?`<button type="button" class="primary-btn small-btn" data-stock="${esc(r.id)}">購入した → ストックへ</button>`:`<button type="button" class="primary-btn small-btn" data-eat="${esc(r.id)}">食べた → 評価する</button>`}</div></div>`).join('')}</div>`:empty(state.future==='wishlist'?'食べたい羊羹はまだありません':'ストックはまだありません','登録は「手帖」タブ右下の「＋ 記録」からできます。')}`;
   }
   function allTasted(){return state.records.filter(r=>r.sessions.length && r.status==='tasted');}
   // 各商品内でセッション平均→各商品を等重み。欠損は平均の分母に含めない。
@@ -249,7 +249,7 @@
     $('blankPrompt').addEventListener('click',e=>copyPrompt(null,e.currentTarget));$('export').addEventListener('click',exportBackup);$('import').addEventListener('change',e=>{if(e.target.files?.[0])importBackup(e.target.files[0]);});
     $('seasonalToggle').addEventListener('change',e=>{try{localStorage.setItem('yokan-seasonal',e.target.checked?'on':'off');}catch(err){}applySeason();});
   }
-  function render(){document.querySelectorAll('.tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===state.tab));if(state.tab==='future')renderFuture();else if(state.tab==='analysis')renderAnalysis();else if(state.tab==='guide')renderGuide();else renderTecho();}
+  function render(){document.querySelectorAll('.tab').forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===state.tab));$('addBtn').style.display=state.tab==='techo'?'':'none';if(state.tab==='future')renderFuture();else if(state.tab==='analysis')renderAnalysis();else if(state.tab==='guide')renderGuide();else renderTecho();}
   const motionOK = () => !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   let navTimer = null;
   function nav(tab){
